@@ -1,0 +1,65 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+
+  --color-primary: #0891b2;
+  --color-deep-crimson: #0e7490;
+  --color-primary-container: #06b6d4;
+  --color-on-primary-container: #cffafe;
+  --color-on-primary: #ffffff;
+  --color-inverse-surface: #2f3131;
+  --color-pure-black: #000000;
+  --color-graphite: #4a4a4a;
+  --color-silver-border: #e5e5e5;
+  --color-surface: #f9f9f9;
+  --color-surface-bright: #f9f9f9;
+  --color-surface-container-lowest: #ffffff;
+  --color-surface-container-low: #f3f3f3;
+  --color-surface-container: #eeeeee;
+  --color-surface-container-high: #e8e8e8;
+  --color-surface-container-highest: #e2e2e2;
+  --color-surface-dim: #dadada;
+  --color-on-surface: #1a1c1c;
+  --color-on-surface-variant: #155e75;
+  --color-on-background: #1a1c1c;
+  --color-secondary: #5f5e5e;
+  --color-secondary-fixed-dim: #c8c6c5;
+  --color-on-secondary-fixed-variant: #474746;
+  --color-error: #ba1a1a;
+  --color-error-container: #ffdad6;
+  --color-on-error-container: #93000a;
+  --color-outline: #64748b;
+  --color-outline-variant: #cffafe;
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #f3f3f3;
+}
+::-webkit-scrollbar-thumb {
+  background: #dadada;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #5f5e5e;
+}
+
+/* Tabular figures for institutional banking amounts */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+input::-webkit-outer-spin-button,
+input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type=number] {
+  -moz-appearance: textfield;
+}
+

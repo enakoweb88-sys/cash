@@ -1,0 +1,7 @@
+{
+  "name": "Afriland Cash Portal",
+  "description": "Enterprise field collection and cash terminal management portal for E-NAKO with offline draft syncing, client directories, and real-time transaction recording.",
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
