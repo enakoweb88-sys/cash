@@ -33,6 +33,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, currentUser }) =>
         <div className="bg-[#ffffff] border border-[#e5e5e5] shadow-sm p-8 flex flex-col gap-6">
           {/* Header */}
           <div className="flex flex-col items-center text-center space-y-1.5">
+            <img src="/logo.png" alt="Company Logo" className="h-16 w-auto object-contain mb-2" />
             <h1 className="text-2xl md:text-3xl font-bold text-[#1a1c1c] tracking-tight">
               Collector Portal
             </h1>

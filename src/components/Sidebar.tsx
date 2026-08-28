@@ -54,9 +54,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* Header / Brand */}
       <div className="px-6 pt-6 pb-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-[#0891b2] text-[#cffafe] flex items-center justify-center font-bold text-lg rounded-full shrink-0 shadow-sm">
-            {user.avatarLetter || 'C'}
-          </div>
+          <img src="/logo.png" alt="Company Logo" className="w-10 h-10 object-contain bg-white/10 p-1 rounded-lg shrink-0 shadow-sm" />
           <div className="min-w-0">
             <h1 className="font-bold text-base tracking-tight text-white leading-tight truncate">
               Collector Portal

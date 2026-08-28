@@ -60,11 +60,9 @@ export const TopBar: React.FC<TopBarProps> = ({
 
           <div 
             onClick={() => onNavigate('dashboard')}
-            className="flex items-center gap-2 cursor-pointer select-none min-w-0"
+            className="flex items-center gap-2.5 cursor-pointer select-none min-w-0"
           >
-            <div className="md:hidden w-7 h-7 bg-[#0891b2] text-[#cffafe] flex items-center justify-center font-bold text-xs rounded-full shrink-0">
-              {user.avatarLetter || 'C'}
-            </div>
+            <img src="/logo.png" alt="E-NAKO Logo" className="h-9 w-auto object-contain shrink-0" />
             <span className="font-bold text-base sm:text-lg md:text-xl text-[#0891b2] uppercase tracking-tight truncate">
               E-NAKO
             </span>
