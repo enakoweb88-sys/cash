@@ -36,8 +36,8 @@ export const ClientsView: React.FC<ClientsViewProps> = ({
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [newClientName, setNewClientName] = useState('');
   const [newClientAddress, setNewClientAddress] = useState('');
-  const [newClientRegion, setNewClientRegion] = useState<Client['region']>('North Sector');
-  const [newClientBalance, setNewClientBalance] = useState('');
+  const [newClientRegion, setNewClientRegion] = useState<Client['region']>('Douala');
+  const [newClientBalance, setNewClientBalance] = useState('0');
   const [newClientPhone, setNewClientPhone] = useState('');
   const [newClientEmail, setNewClientEmail] = useState('');
 
@@ -90,7 +90,7 @@ export const ClientsView: React.FC<ClientsViewProps> = ({
     // Reset form
     setNewClientName('');
     setNewClientAddress('');
-    setNewClientBalance('');
+    setNewClientBalance('0');
     setNewClientPhone('');
     setNewClientEmail('');
     setIsAddModalOpen(false);
@@ -159,10 +159,9 @@ export const ClientsView: React.FC<ClientsViewProps> = ({
               className="w-full py-2.5 pl-3.5 pr-8 bg-[#ffffff] border border-[#e5e5e5] appearance-none focus:border-[#0891b2] focus:ring-1 focus:ring-[#0891b2] outline-none text-xs sm:text-sm text-[#1a1c1c] cursor-pointer"
             >
               <option value="">All Regions</option>
-              <option value="North Sector">North Sector</option>
-              <option value="South Sector">South Sector</option>
-              <option value="East Sector">East Sector</option>
-              <option value="West Sector">West Sector</option>
+              <option value="Douala">Douala</option>
+              <option value="Yaounde">Yaounde</option>
+              <option value="Buea">Buea</option>
             </select>
             <ChevronDown className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-[#4a4a4a] pointer-events-none" />
           </div>
@@ -221,37 +220,17 @@ export const ClientsView: React.FC<ClientsViewProps> = ({
                 </div>
               </div>
 
-              {/* Outstanding & Collect Action */}
+              {/* Account Balance */}
               <div className="flex flex-row md:flex-col items-center md:items-end justify-between w-full md:w-auto gap-4 pt-4 md:pt-0 border-t border-[#e5e5e5] md:border-none">
                 <div className="text-left md:text-right">
-                  <div className={`text-[11px] font-bold uppercase tracking-wider mb-0.5 ${
-                    hasBalance ? 'text-[#0891b2]' : 'text-[#4a4a4a]'
-                  }`}>
-                    Outstanding
+                  <div className="text-[11px] font-bold uppercase tracking-wider mb-0.5 text-[#5f5e5e]">
+                    Current Balance
                   </div>
                   <div className="font-mono text-xl md:text-2xl font-bold text-[#1a1c1c] tabular-nums">
                     {formatXAF(client.outstandingBalance)}{' '}
-                    <span className="text-xs font-normal text-[#5f5e5e] font-sans">XAF</span>
+                    <span className="text-xs font-normal text-[#5f5e5e] font-sans">FCFA</span>
                   </div>
                 </div>
-
-                {hasBalance ? (
-                  <button
-                    onClick={() => onSelectClientForCollection(client)}
-                    className="px-4 py-2 bg-[#ffffff] hover:bg-[#ecfeff] hover:border-[#0891b2] border border-[#e5e5e5] text-xs font-bold uppercase tracking-wider text-[#0e7490] transition-colors flex items-center gap-2 cursor-pointer shadow-xs"
-                  >
-                    <Banknote className="w-4 h-4 text-[#0891b2]" />
-                    <span>Collect</span>
-                  </button>
-                ) : (
-                  <button
-                    disabled
-                    className="px-4 py-2 bg-[#ffffff] border border-[#e5e5e5] text-xs font-bold uppercase tracking-wider text-[#4a4a4a] flex items-center gap-2 opacity-60 cursor-not-allowed"
-                  >
-                    <Check className="w-4 h-4 stroke-[2.5]" />
-                    <span>Cleared</span>
-                  </button>
-                )}
               </div>
             </div>
           );
@@ -320,10 +299,9 @@ export const ClientsView: React.FC<ClientsViewProps> = ({
                     onChange={(e) => setNewClientRegion(e.target.value as Client['region'])}
                     className="w-full h-11 px-3 bg-[#ffffff] border border-[#e5e5e5] focus:border-[#0891b2] focus:ring-1 focus:ring-[#0891b2] outline-none text-sm"
                   >
-                    <option value="North Sector">North Sector</option>
-                    <option value="South Sector">South Sector</option>
-                    <option value="East Sector">East Sector</option>
-                    <option value="West Sector">West Sector</option>
+                    <option value="Douala">Douala</option>
+                    <option value="Yaounde">Yaounde</option>
+                    <option value="Buea">Buea</option>
                   </select>
                 </div>
 

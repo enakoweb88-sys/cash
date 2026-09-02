@@ -13,7 +13,7 @@ import {
   ChevronDown
 } from 'lucide-react';
 import { Collection, TransactionStatus, CollectorUser, Client } from '../types';
-import { formatXAF, INITIAL_CLIENTS, INITIAL_USER } from '../data/mockData';
+import { formatXAF, INITIAL_USER } from '../data/mockData';
 import {
   downloadReportPDF,
   downloadReportExcel,
@@ -26,14 +26,16 @@ interface HistoryViewProps {
   user?: CollectorUser;
   clients?: Client[];
   onSelectCollection: (col: Collection) => void;
+  onOpenStatusUpdate?: (col: Collection) => void;
   onOpenReport: () => void;
 }
 
 export const HistoryView: React.FC<HistoryViewProps> = ({
   collections,
   user = INITIAL_USER,
-  clients = INITIAL_CLIENTS,
+  clients = [],
   onSelectCollection,
+  onOpenStatusUpdate,
   onOpenReport,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -311,29 +313,51 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
 
                 <td className="p-4 font-mono text-sm font-bold text-[#1a1c1c] tabular-nums">
                   {formatXAF(col.amount)}
+                  {(col.shortageAmount || 0) > 0 && (
+                    <div className="text-[10px] text-[#ba1a1a] font-normal">Shortage: -{formatXAF(col.shortageAmount!)}</div>
+                  )}
+                  {(col.extraAmount || 0) > 0 && (
+                    <div className="text-[10px] text-[#0891b2] font-normal">Extra: +{formatXAF(col.extraAmount!)}</div>
+                  )}
                 </td>
 
                 <td className="p-4 text-xs text-[#5f5e5e] max-w-[200px] truncate">
                   {col.location || 'Terminal Registered Location'}
+                  {col.depositDestination && (
+                    <div className="text-[10px] text-[#0891b2] font-mono font-semibold">
+                      Bank: {col.depositDestination}
+                    </div>
+                  )}
                 </td>
 
                 <td className="p-4 text-right">
-                  {col.status === 'COMPLETE' ? (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-[#ecfeff] text-[#0e7490] text-[11px] font-bold tracking-wider uppercase border border-[#a5f3fc]">
-                      <Check className="w-3 h-3 stroke-[3]" />
-                      <span>COMPLETE</span>
-                    </span>
-                  ) : col.status === 'CANCELLED' ? (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-[#eeeeee] text-[#5f5e5e] text-[11px] font-bold tracking-wider uppercase border border-[#e5e5e5]">
-                      <X className="w-3 h-3 stroke-[3]" />
-                      <span>CANCELLED</span>
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-[#eeeeee] text-[#5f5e5e] text-[11px] font-bold tracking-wider uppercase border border-[#e5e5e5]">
-                      <Clock className="w-3 h-3" />
-                      <span>PENDING</span>
-                    </span>
-                  )}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (onOpenStatusUpdate) onOpenStatusUpdate(col);
+                      else onSelectCollection(col);
+                    }}
+                    className="hover:opacity-80 transition-opacity cursor-pointer inline-block"
+                    title="Click to update transaction status"
+                  >
+                    {col.status === 'COMPLETE' ? (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-[#ecfeff] text-[#0e7490] text-[11px] font-bold tracking-wider uppercase border border-[#a5f3fc]">
+                        <Check className="w-3 h-3 stroke-[3]" />
+                        <span>COMPLETE</span>
+                      </span>
+                    ) : col.status === 'CANCELLED' ? (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-[#eeeeee] text-[#5f5e5e] text-[11px] font-bold tracking-wider uppercase border border-[#e5e5e5]">
+                        <X className="w-3 h-3 stroke-[3]" />
+                        <span>CANCELLED</span>
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-[#eeeeee] text-[#5f5e5e] text-[11px] font-bold tracking-wider uppercase border border-[#e5e5e5]">
+                        <Clock className="w-3 h-3 text-[#0891b2]" />
+                        <span>PENDING</span>
+                      </span>
+                    )}
+                  </button>
                 </td>
               </tr>
             ))}

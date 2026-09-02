@@ -119,44 +119,11 @@ export const TopBar: React.FC<TopBarProps> = ({
             <Search className="w-4 h-4" />
           </button>
 
-          {/* Offline / Online indicator */}
-          <button
-            onClick={onToggleOffline}
-            title={isOffline ? "Currently in Offline Mode. Click to switch Online." : "Currently Online. Click to simulate Field Offline Mode."}
-            className={`flex items-center gap-1.5 px-2 sm:px-2.5 py-1 text-[10px] sm:text-[11px] font-bold tracking-wider uppercase border transition-colors cursor-pointer ${
-              isOffline 
-                ? 'bg-[#e8e8e8] text-[#4a4a4a] border-[#e5e5e5]' 
-                : 'bg-[#ecfeff] text-[#0e7490] border-[#a5f3fc]'
-            }`}
-          >
-            {isOffline ? (
-              <>
-                <div className="w-2 h-2 rounded-full bg-[#0891b2] animate-pulse" />
-                <span className="hidden sm:inline">Offline Mode</span>
-                <span className="sm:hidden">Offline</span>
-              </>
-            ) : (
-              <>
-                <div className="w-2 h-2 rounded-full bg-[#0891b2]" />
-                <span className="hidden sm:inline">Network Online</span>
-                <span className="sm:hidden">Online</span>
-              </>
-            )}
-          </button>
-
-          {/* Sync Button */}
-          <button
-            onClick={onSync}
-            disabled={isSyncing}
-            className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center text-[#0891b2] hover:bg-[#eeeeee] transition-colors relative"
-            title={pendingDraftCount > 0 ? `Sync ${pendingDraftCount} offline drafts now` : 'Sync Terminal with Central Server'}
-            aria-label="Sync"
-          >
-            <RotateCw className={`w-4 h-4 ${isSyncing ? 'animate-spin text-[#06b6d4]' : ''}`} />
-            {pendingDraftCount > 0 && !isSyncing && (
-              <span className="absolute top-1 right-1 w-2 h-2 bg-[#0891b2] rounded-full" />
-            )}
-          </button>
+          {/* Online status indicator */}
+          <div className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-bold tracking-wider uppercase bg-[#ecfeff] text-[#0e7490] border border-[#a5f3fc]">
+            <div className="w-2 h-2 rounded-full bg-[#0891b2]" />
+            <span>Online System</span>
+          </div>
 
           {/* Settings Button */}
           <button

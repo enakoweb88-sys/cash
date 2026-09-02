@@ -2,11 +2,15 @@ export type ViewType = 'dashboard' | 'new-collection' | 'clients' | 'history';
 
 export type TransactionStatus = 'COMPLETE' | 'PENDING' | 'CANCELLED';
 
+export type TransactionType = 'COLLECTING' | 'PAYOUT';
+
+export type DepositDestination = 'ECOBANK' | 'AFRILAND FIRST BANK' | 'UBA' | 'MTN SPECTRUM';
+
 export interface Client {
   id: string; // e.g. "C-9821"
   name: string;
   address: string;
-  region: 'North Sector' | 'South Sector' | 'East Sector' | 'West Sector';
+  region: 'Douala' | 'Yaounde' | 'Buea';
   lastVisit: string;
   outstandingBalance: number; // in XAF
   phone?: string;
@@ -21,11 +25,16 @@ export interface Collection {
   time: string;
   timestamp: string;
   status: TransactionStatus;
+  type?: TransactionType;
+  depositDestination?: DepositDestination;
   location?: string;
   notes?: string;
   receiptUrl?: string;
   receiptName?: string;
   isDraft?: boolean;
+  shortageAmount?: number;
+  extraAmount?: number;
+  summaryNote?: string;
 }
 
 export interface CollectorUser {

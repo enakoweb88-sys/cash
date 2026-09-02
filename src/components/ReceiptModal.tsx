@@ -132,6 +132,20 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
               <span className="font-bold text-[#1a1c1c]">{new Date(collection.timestamp).toLocaleString()}</span>
             </div>
 
+            <div className="flex justify-between border-b border-[#e5e5e5] pb-2">
+              <span className="text-[#5f5e5e] uppercase">Transaction Type</span>
+              <span className={`font-bold uppercase ${collection.type === 'PAYOUT' ? 'text-[#ba1a1a]' : 'text-[#0891b2]'}`}>
+                {collection.type || 'COLLECTING'}
+              </span>
+            </div>
+
+            {collection.depositDestination && (
+              <div className="flex justify-between border-b border-[#e5e5e5] pb-2">
+                <span className="text-[#5f5e5e] uppercase">Deposit Bank</span>
+                <span className="font-bold text-[#0891b2] font-sans">{collection.depositDestination}</span>
+              </div>
+            )}
+
             <div className="flex justify-between">
               <span className="text-[#5f5e5e] uppercase">GPS / Location</span>
               <span className="font-bold text-[#1a1c1c] max-w-[200px] text-right truncate">
@@ -143,17 +157,28 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
           {/* Amount Box */}
           <div className="bg-[#eeeeee] p-4 border border-[#e5e5e5] text-center">
             <div className="text-xs uppercase font-bold text-[#4a4a4a] mb-1">
-              Collected Amount
+              {collection.type === 'PAYOUT' ? 'Payout Amount' : 'Collected Amount'}
             </div>
             <div className="font-mono text-3xl font-black text-[#0891b2] tabular-nums">
-              {formatXAF(collection.amount)} <span className="text-base text-[#5f5e5e] font-sans font-normal">XAF</span>
+              {formatXAF(collection.amount)} <span className="text-base text-[#5f5e5e] font-sans font-normal">FCFA</span>
             </div>
+
+            {((collection.shortageAmount || 0) > 0 || (collection.extraAmount || 0) > 0) && (
+              <div className="flex justify-center gap-4 mt-2 pt-2 border-t border-[#e5e5e5] text-xs font-mono">
+                {(collection.shortageAmount || 0) > 0 && (
+                  <span className="text-[#ba1a1a] font-bold">Shortage: -{formatXAF(collection.shortageAmount!)} FCFA</span>
+                )}
+                {(collection.extraAmount || 0) > 0 && (
+                  <span className="text-[#0891b2] font-bold">Extra: +{formatXAF(collection.extraAmount!)} FCFA</span>
+                )}
+              </div>
+            )}
           </div>
 
-          {collection.notes && (
+          {(collection.summaryNote || collection.notes) && (
             <div className="p-3 bg-[#ffffff] border border-[#e5e5e5] text-xs">
-              <span className="font-bold uppercase text-[#5f5e5e] block mb-1">Field Notes:</span>
-              <p className="text-[#1a1c1c]">{collection.notes}</p>
+              <span className="font-bold uppercase text-[#5f5e5e] block mb-1">Summary / Field Notes:</span>
+              <p className="text-[#1a1c1c]">{collection.summaryNote || collection.notes}</p>
             </div>
           )}
 

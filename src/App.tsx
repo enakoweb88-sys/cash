@@ -6,7 +6,7 @@ import {
   INITIAL_DRAFTS,
   formatXAF
 } from './data/mockData';
-import { Client, Collection, CollectorUser, ViewType } from './types';
+import { Client, Collection, CollectorUser, ViewType, TransactionStatus } from './types';
 import { Sidebar } from './components/Sidebar';
 import { TopBar } from './components/TopBar';
 import { DashboardView } from './components/DashboardView';
@@ -19,6 +19,8 @@ import { GenerateReportModal } from './components/GenerateReportModal';
 import { SettingsModal } from './components/SettingsModal';
 import { SupportModal } from './components/SupportModal';
 import { ProfileModal } from './components/ProfileModal';
+import { StatusUpdateModal } from './components/StatusUpdateModal';
+import { fetchRemoteCollections, createRemoteCollection, updateRemoteCollectionStatus } from './api/cashApi';
 import { CheckCircle2, AlertCircle, RefreshCw } from 'lucide-react';
 
 export default function App() {
@@ -34,20 +36,32 @@ export default function App() {
 
   // Clients State
   const [clients, setClients] = useState<Client[]>(() => {
-    const saved = localStorage.getItem('enako_clients') || localStorage.getItem('afriland_clients');
-    return saved ? JSON.parse(saved) : INITIAL_CLIENTS;
+    const saved = localStorage.getItem('enako_clients');
+    if (saved && (saved.includes('C-9821') || saved.includes('Alpha Boutiques') || saved.includes('Jean-Luc'))) {
+      localStorage.removeItem('enako_clients');
+      return [];
+    }
+    return saved ? JSON.parse(saved) : [];
   });
 
   // Collections (Settled / Server synced)
   const [collections, setCollections] = useState<Collection[]>(() => {
-    const saved = localStorage.getItem('enako_collections') || localStorage.getItem('afriland_collections');
-    return saved ? JSON.parse(saved) : INITIAL_COLLECTIONS;
+    const saved = localStorage.getItem('enako_collections');
+    if (saved && (saved.includes('COL-8923') || saved.includes('Marché Central'))) {
+      localStorage.removeItem('enako_collections');
+      return [];
+    }
+    return saved ? JSON.parse(saved) : [];
   });
 
   // Offline Drafts
   const [drafts, setDrafts] = useState<Collection[]>(() => {
-    const saved = localStorage.getItem('enako_drafts') || localStorage.getItem('afriland_drafts');
-    return saved ? JSON.parse(saved) : INITIAL_DRAFTS;
+    const saved = localStorage.getItem('enako_drafts');
+    if (saved && (saved.includes('C-9001') || saved.includes('Kamer Logistics'))) {
+      localStorage.removeItem('enako_drafts');
+      return [];
+    }
+    return saved ? JSON.parse(saved) : [];
   });
 
   // Selected client when navigating from Clients -> New Collection
@@ -55,6 +69,7 @@ export default function App() {
 
   // Modals state
   const [activeReceipt, setActiveReceipt] = useState<Collection | null>(null);
+  const [statusUpdateCollection, setStatusUpdateCollection] = useState<Collection | null>(null);
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isSupportModalOpen, setIsSupportModalOpen] = useState(false);
@@ -63,9 +78,18 @@ export default function App() {
   // Global search
   const [globalSearch, setGlobalSearch] = useState('');
 
-  // Offline Mode and Sync State
-  const [isOffline, setIsOffline] = useState(false);
-  const [isSyncing, setIsSyncing] = useState(false);
+  // Fetch remote collections on load from backend
+  useEffect(() => {
+    fetchRemoteCollections().then((remoteData) => {
+      if (remoteData && remoteData.length > 0) {
+        setCollections((prev) => {
+          const existingIds = new Set(prev.map((c) => c.id));
+          const newFromRemote = remoteData.filter((r) => !existingIds.has(r.id));
+          return [...newFromRemote, ...prev];
+        });
+      }
+    });
+  }, []);
 
   // Toast notifications
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'info' | 'error' } | null>(null);
@@ -102,13 +126,33 @@ export default function App() {
   };
 
   // Login handler
-  const handleLogin = (credentials: { id: string; remember: boolean }) => {
-    setUser({
-      ...user,
-      id: credentials.id || 'COL-0921',
-      isLoggedIn: true,
+  const handleLogin = (credentials: { email: string; password?: string; remember: boolean }) => {
+    setUser((prev) => {
+      const firstName = prev.name ? prev.name.trim().split(' ')[0] : 'Collector';
+      return {
+        ...prev,
+        email: credentials.email || prev.email,
+        isLoggedIn: true,
+      };
     });
-    showToast(`Welcome back, Officer ${credentials.id}! Terminal AFB-092 initialized.`, 'success');
+    const firstName = user.name ? user.name.trim().split(' ')[0] : 'Collector';
+    showToast(`Welcome back, ${firstName}! Terminal session active.`, 'success');
+  };
+
+  // Sign Up handler
+  const handleSignUp = (userData: { firstName: string; lastName: string; email: string; password?: string }) => {
+    const fullName = `${userData.firstName.trim()} ${userData.lastName.trim()}`;
+    const newUser: CollectorUser = {
+      id: `COL-${Math.floor(1000 + Math.random() * 9000)}`,
+      name: fullName,
+      email: userData.email,
+      terminalId: `ENK-${Math.floor(100 + Math.random() * 900)}`,
+      branch: 'Douala Main Hub',
+      avatarLetter: userData.firstName[0] ? userData.firstName[0].toUpperCase() : 'C',
+      isLoggedIn: true,
+    };
+    setUser(newUser);
+    showToast(`Account created successfully! Welcome, ${userData.firstName.trim()}!`, 'success');
   };
 
   // Logout handler
@@ -117,94 +161,50 @@ export default function App() {
     showToast('Signed out of terminal successfully.', 'info');
   };
 
-  // Save new collection (either submitted directly or saved as offline draft)
+  // Save new collection and submit directly to central backend API
   const handleSaveCollection = (data: Omit<Collection, 'id'>, isDraft: boolean) => {
     const randomIdNum = Math.floor(1000 + Math.random() * 9000);
-    const newId = isDraft ? `C-${randomIdNum}` : `COL-${randomIdNum}`;
+    const newId = `COL-${randomIdNum}`;
 
     const newRecord: Collection = {
       ...data,
       id: newId,
-      isDraft,
+      isDraft: false,
     };
 
-    if (isDraft || isOffline) {
-      // Add to drafts
-      const draftRecord = { ...newRecord, isDraft: true, status: 'PENDING' as const };
-      setDrafts((prev) => [draftRecord, ...prev]);
-      showToast(`Draft saved locally (${formatXAF(data.amount)} XAF). Awaiting network sync.`, 'info');
-      setCurrentView('dashboard');
-    } else {
-      // Add to synced collections
-      setCollections((prev) => [newRecord, ...prev]);
+    // Add to local state
+    setCollections((prev) => [newRecord, ...prev]);
 
-      // Deduct from client balance if status is COMPLETE
-      if (data.status === 'COMPLETE') {
-        setClients((prevClients) =>
-          prevClients.map((client) => {
-            if (client.id === data.clientId) {
-              const newBalance = Math.max(0, client.outstandingBalance - data.amount);
-              return {
-                ...client,
-                outstandingBalance: newBalance,
-                lastVisit: 'Just now',
-              };
-            }
-            return client;
-          })
-        );
+    // Send to central backend database
+    createRemoteCollection(newRecord).then((success) => {
+      if (success) {
+        console.log(`Collection ${newId} posted to backend API`);
       }
+    });
 
-      showToast(`Collection ${newId} submitted and settled successfully!`, 'success');
-      setActiveReceipt(newRecord);
-      setCurrentView('dashboard');
+    // Deduct from client balance if status is COMPLETE
+    if (data.status === 'COMPLETE') {
+      setClients((prevClients) =>
+        prevClients.map((client) => {
+          if (client.id === data.clientId) {
+            const newBalance = Math.max(0, client.outstandingBalance - data.amount);
+            return {
+              ...client,
+              outstandingBalance: newBalance,
+              lastVisit: 'Just now',
+            };
+          }
+          return client;
+        })
+      );
     }
+
+    showToast(`Collection ${newId} submitted directly to central system!`, 'success');
+    setActiveReceipt(newRecord);
+    setCurrentView('dashboard');
 
     // Reset selected client
     setSelectedClientForCollection(null);
-  };
-
-  // Sync Drafts
-  const handleSyncDrafts = () => {
-    if (drafts.length === 0) {
-      showToast('No pending offline drafts to sync.', 'info');
-      return;
-    }
-
-    setIsSyncing(true);
-    showToast(`Connecting to central vault to sync ${drafts.length} drafts...`, 'info');
-
-    setTimeout(() => {
-      // Convert drafts to completed collections
-      const syncedCollections: Collection[] = drafts.map((d) => ({
-        ...d,
-        status: 'COMPLETE',
-        isDraft: false,
-      }));
-
-      // Update client balances for all synced drafts
-      setClients((prevClients) => {
-        let updated = [...prevClients];
-        drafts.forEach((draft) => {
-          updated = updated.map((c) => {
-            if (c.id === draft.clientId) {
-              return {
-                ...c,
-                outstandingBalance: Math.max(0, c.outstandingBalance - draft.amount),
-                lastVisit: 'Today',
-              };
-            }
-            return c;
-          });
-        });
-        return updated;
-      });
-
-      setCollections((prev) => [...syncedCollections, ...prev]);
-      setDrafts([]);
-      setIsSyncing(false);
-      showToast(`All ${drafts.length} drafts synchronized and settled!`, 'success');
-    }, 1200);
   };
 
   // Add new client to database
@@ -217,6 +217,35 @@ export default function App() {
     };
     setClients((prev) => [client, ...prev]);
     showToast(`Client ${client.name} (#${newId}) registered in terminal!`, 'success');
+  };
+
+  // Handle status update and settlement notes
+  const handleSaveStatus = (
+    collectionId: string, 
+    newStatus: TransactionStatus, 
+    shortage: number, 
+    extra: number, 
+    summaryNote: string
+  ) => {
+    setCollections((prevCollections) =>
+      prevCollections.map((col) => {
+        if (col.id === collectionId) {
+          return {
+            ...col,
+            status: newStatus,
+            shortageAmount: shortage,
+            extraAmount: extra,
+            summaryNote: summaryNote,
+          };
+        }
+        return col;
+      })
+    );
+
+    // Send update to central backend database
+    updateRemoteCollectionStatus(collectionId, newStatus);
+
+    showToast(`Transaction #${collectionId} status updated to ${newStatus}.`, 'success');
   };
 
   // Select client from Clients directory and jump to New Collection screen
@@ -254,6 +283,7 @@ export default function App() {
       <LoginView
         currentUser={user}
         onLogin={handleLogin}
+        onSignUp={handleSignUp}
       />
     );
   }
@@ -289,20 +319,11 @@ export default function App() {
             setCurrentView(view);
           }}
           user={user}
-          isOffline={isOffline}
-          onToggleOffline={() => {
-            const nextState = !isOffline;
-            setIsOffline(nextState);
-            showToast(
-              nextState 
-                ? 'Offline Mode Active. New collections will be saved to local drafts.' 
-                : 'Online Mode Connected. Terminal connected to Central Vault.',
-              nextState ? 'info' : 'success'
-            );
-          }}
-          isSyncing={isSyncing}
-          onSync={handleSyncDrafts}
-          pendingDraftCount={drafts.length}
+          isOffline={false}
+          onToggleOffline={() => {}}
+          isSyncing={false}
+          onSync={() => {}}
+          pendingDraftCount={0}
           onOpenSettings={() => setIsSettingsModalOpen(true)}
           onOpenProfile={() => setIsProfileModalOpen(true)}
           onOpenMobileMenu={() => setMobileMenuOpen(true)}
@@ -341,14 +362,16 @@ export default function App() {
             <DashboardView
               collections={collections}
               drafts={drafts}
+              user={user}
               onNavigate={(view) => {
                 if (view === 'new-collection') setSelectedClientForCollection(null);
                 setCurrentView(view);
               }}
               onSelectCollection={(col) => setActiveReceipt(col)}
-              onSyncDrafts={handleSyncDrafts}
-              isSyncing={isSyncing}
-              onDeleteDraft={handleDeleteDraft}
+              onOpenStatusUpdate={(col) => setStatusUpdateCollection(col)}
+              onSyncDrafts={() => {}}
+              isSyncing={false}
+              onDeleteDraft={() => {}}
               onOpenReport={() => setIsReportModalOpen(true)}
             />
           )}
@@ -367,7 +390,7 @@ export default function App() {
               initialSelectedClient={selectedClientForCollection}
               onSaveCollection={handleSaveCollection}
               onNavigate={setCurrentView}
-              isOffline={isOffline}
+              isOffline={false}
             />
           )}
 
@@ -377,6 +400,7 @@ export default function App() {
               user={user}
               clients={clients}
               onSelectCollection={(col) => setActiveReceipt(col)}
+              onOpenStatusUpdate={(col) => setStatusUpdateCollection(col)}
               onOpenReport={() => setIsReportModalOpen(true)}
             />
           )}
@@ -388,6 +412,12 @@ export default function App() {
         collection={activeReceipt}
         user={user}
         onClose={() => setActiveReceipt(null)}
+      />
+
+      <StatusUpdateModal
+        collection={statusUpdateCollection}
+        onClose={() => setStatusUpdateCollection(null)}
+        onSaveStatus={handleSaveStatus}
       />
 
       {isReportModalOpen && (
@@ -403,11 +433,8 @@ export default function App() {
       {isSettingsModalOpen && (
         <SettingsModal
           user={user}
-          isOffline={isOffline}
-          onToggleOffline={() => {
-            setIsOffline(!isOffline);
-            showToast(!isOffline ? 'Offline Mode Active' : 'Online Mode Connected', 'info');
-          }}
+          isOffline={false}
+          onToggleOffline={() => {}}
           onResetData={handleResetData}
           onClose={() => setIsSettingsModalOpen(false)}
         />
@@ -416,7 +443,7 @@ export default function App() {
       {isSupportModalOpen && (
         <SupportModal
           user={user}
-          isOffline={isOffline}
+          isOffline={false}
           draftCount={drafts.length}
           onClose={() => setIsSupportModalOpen(false)}
         />

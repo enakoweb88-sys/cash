@@ -15,14 +15,16 @@ import {
   Trash2,
   FileText
 } from 'lucide-react';
-import { Collection, ViewType } from '../types';
+import { Collection, ViewType, CollectorUser } from '../types';
 import { formatXAF } from '../data/mockData';
 
 interface DashboardViewProps {
   collections: Collection[];
   drafts: Collection[];
+  user?: CollectorUser;
   onNavigate: (view: ViewType) => void;
   onSelectCollection: (col: Collection) => void;
+  onOpenStatusUpdate?: (col: Collection) => void;
   onSyncDrafts: () => void;
   isSyncing: boolean;
   onDeleteDraft?: (id: string) => void;
@@ -32,13 +34,18 @@ interface DashboardViewProps {
 export const DashboardView: React.FC<DashboardViewProps> = ({
   collections,
   drafts,
+  user,
   onNavigate,
   onSelectCollection,
+  onOpenStatusUpdate,
   onSyncDrafts,
   isSyncing,
   onDeleteDraft,
   onOpenReport,
 }) => {
+  // Extract collector's first name only
+  const firstName = user?.name ? user.name.trim().split(' ')[0] : 'Collector';
+
   // Calculate real-time totals
   const totalCompletedAmount = collections
     .filter((c) => c.status === 'COMPLETE')
@@ -57,7 +64,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-[#e5e5e5] pb-4">
         <div>
           <h2 className="text-2xl md:text-3xl font-bold tracking-tight text-[#1a1c1c] mb-1">
-            Overview
+            Welcome, {firstName}
           </h2>
           <p className="text-sm text-[#5f5e5e]">
             Today's collection status and activities.
@@ -194,16 +201,34 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     className="hover:bg-[#f9f9f9] transition-colors cursor-pointer group"
                   >
                     <td className="p-4">
-                      <div className="font-mono text-sm font-semibold text-[#1a1c1c] group-hover:text-[#0891b2] transition-colors">
-                        {col.clientId}
+                      <div className="font-mono text-sm font-semibold text-[#1a1c1c] group-hover:text-[#0891b2] transition-colors flex items-center gap-2">
+                        <span>{col.clientId}</span>
+                        {col.type && (
+                          <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 border ${
+                            col.type === 'PAYOUT' ? 'bg-[#ffdad6] text-[#93000a] border-[#ffb4ab]' : 'bg-[#ecfeff] text-[#0e7490] border-[#a5f3fc]'
+                          }`}>
+                            {col.type}
+                          </span>
+                        )}
                       </div>
                       <div className="text-xs text-[#5f5e5e] mt-0.5">
                         {col.clientName}
                       </div>
+                      {col.depositDestination && (
+                        <div className="text-[10px] font-mono text-[#0891b2] font-semibold mt-0.5">
+                          Bank: {col.depositDestination}
+                        </div>
+                      )}
                     </td>
 
                     <td className="p-4 text-sm font-bold text-[#1a1c1c] group-hover:text-[#0891b2] transition-colors tabular-nums font-mono">
                       {formatXAF(col.amount)}
+                      {(col.shortageAmount || 0) > 0 && (
+                        <div className="text-[10px] text-[#ba1a1a] font-normal">Shortage: -{formatXAF(col.shortageAmount!)}</div>
+                      )}
+                      {(col.extraAmount || 0) > 0 && (
+                        <div className="text-[10px] text-[#0891b2] font-normal">Extra: +{formatXAF(col.extraAmount!)}</div>
+                      )}
                     </td>
 
                     <td className="p-4 text-xs text-[#5f5e5e] font-mono">
@@ -211,22 +236,33 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     </td>
 
                     <td className="p-4 text-right">
-                      {col.status === 'COMPLETE' ? (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-[#ecfeff] text-[#0e7490] text-[11px] font-bold tracking-wider uppercase border border-[#a5f3fc]">
-                          <Check className="w-3 h-3 stroke-[3]" />
-                          <span>COMPLETE</span>
-                        </span>
-                      ) : col.status === 'CANCELLED' ? (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-[#eeeeee] text-[#5f5e5e] text-[11px] font-bold tracking-wider uppercase border border-[#e5e5e5]">
-                          <X className="w-3 h-3 stroke-[3]" />
-                          <span>CANCELLED</span>
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-[#eeeeee] text-[#5f5e5e] text-[11px] font-bold tracking-wider uppercase border border-[#e5e5e5]">
-                          <Clock className="w-3 h-3" />
-                          <span>PENDING</span>
-                        </span>
-                      )}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (onOpenStatusUpdate) onOpenStatusUpdate(col);
+                          else onSelectCollection(col);
+                        }}
+                        className="hover:opacity-80 transition-opacity cursor-pointer inline-block"
+                        title="Click to update transaction status"
+                      >
+                        {col.status === 'COMPLETE' ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-[#ecfeff] text-[#0e7490] text-[11px] font-bold tracking-wider uppercase border border-[#a5f3fc]">
+                            <Check className="w-3 h-3 stroke-[3]" />
+                            <span>COMPLETE</span>
+                          </span>
+                        ) : col.status === 'CANCELLED' ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-[#eeeeee] text-[#5f5e5e] text-[11px] font-bold tracking-wider uppercase border border-[#e5e5e5]">
+                            <X className="w-3 h-3 stroke-[3]" />
+                            <span>CANCELLED</span>
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-[#eeeeee] text-[#5f5e5e] text-[11px] font-bold tracking-wider uppercase border border-[#e5e5e5]">
+                            <Clock className="w-3 h-3 text-[#0891b2]" />
+                            <span>PENDING</span>
+                          </span>
+                        )}
+                      </button>
                     </td>
                   </tr>
                 ))}

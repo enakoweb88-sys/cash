@@ -13,7 +13,7 @@ import {
   FileCheck, 
   Calendar 
 } from 'lucide-react';
-import { Client, Collection, TransactionStatus, ViewType } from '../types';
+import { Client, Collection, TransactionStatus, ViewType, TransactionType, DepositDestination } from '../types';
 import { formatXAF } from '../data/mockData';
 
 interface NewCollectionViewProps {
@@ -54,6 +54,8 @@ export const NewCollectionView: React.FC<NewCollectionViewProps> = ({
 
   const [collectionTime, setCollectionTime] = useState<string>(getCurrentDateTimeLocal());
   const [transactionState, setTransactionState] = useState<TransactionStatus>('COMPLETE');
+  const [transactionType, setTransactionType] = useState<TransactionType>('COLLECTING');
+  const [depositDestination, setDepositDestination] = useState<DepositDestination>('AFRILAND FIRST BANK');
   const [notes, setNotes] = useState<string>('');
   
   // Receipt file upload
@@ -178,6 +180,8 @@ export const NewCollectionView: React.FC<NewCollectionViewProps> = ({
         time: timeFormatted,
         timestamp: dateObj.toISOString(),
         status: isDraft ? 'PENDING' : transactionState,
+        type: transactionType,
+        depositDestination: transactionType === 'COLLECTING' ? depositDestination : undefined,
         location: location || selectedClient.address,
         notes: notes || undefined,
         receiptName: receiptFile?.name,
@@ -188,7 +192,7 @@ export const NewCollectionView: React.FC<NewCollectionViewProps> = ({
     );
   };
 
-  const outstandingBal = selectedClient ? selectedClient.outstandingBalance : 75000;
+  const outstandingBal = selectedClient ? selectedClient.outstandingBalance : 0;
 
   return (
     <div className="max-w-3xl mx-auto space-y-8 pb-32">
@@ -286,6 +290,61 @@ export const NewCollectionView: React.FC<NewCollectionViewProps> = ({
             </div>
           )}
         </div>
+
+        {/* Transaction Category: Collecting vs Payout */}
+        <div className="bg-[#ffffff] p-6 border border-[#e5e5e5]">
+          <label className="block text-xs font-bold uppercase tracking-widest text-[#1a1c1c] mb-3">
+            Transaction Category *
+          </label>
+          <div className="grid grid-cols-2 gap-4">
+            <button
+              type="button"
+              onClick={() => setTransactionType('COLLECTING')}
+              className={`h-12 border text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                transactionType === 'COLLECTING'
+                  ? 'bg-[#0891b2] text-white border-[#0891b2] shadow-sm'
+                  : 'bg-[#ffffff] text-[#4a4a4a] border-[#e5e5e5] hover:bg-[#f3f3f3]'
+              }`}
+            >
+              <span>Collecting (Cash In)</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setTransactionType('PAYOUT')}
+              className={`h-12 border text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                transactionType === 'PAYOUT'
+                  ? 'bg-[#ba1a1a] text-white border-[#ba1a1a] shadow-sm'
+                  : 'bg-[#ffffff] text-[#4a4a4a] border-[#e5e5e5] hover:bg-[#f3f3f3]'
+              }`}
+            >
+              <span>Payout (Cash Out)</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Deposit Destination Dropdown (Only when Collecting) */}
+        {transactionType === 'COLLECTING' && (
+          <div className="bg-[#ffffff] p-6 border border-[#e5e5e5]">
+            <label 
+              htmlFor="deposit_destination"
+              className="block text-xs font-bold uppercase tracking-widest text-[#1a1c1c] mb-2"
+            >
+              Deposit Location / Destination Bank *
+            </label>
+            <select
+              id="deposit_destination"
+              value={depositDestination}
+              onChange={(e) => setDepositDestination(e.target.value as DepositDestination)}
+              className="w-full h-12 px-4 bg-[#ffffff] border border-[#e5e5e5] focus:border-[#0891b2] focus:ring-1 focus:ring-[#0891b2] text-sm text-[#1a1c1c] font-bold outline-none cursor-pointer"
+            >
+              <option value="ECOBANK">ECOBANK</option>
+              <option value="AFRILAND FIRST BANK">AFRILAND FIRST BANK</option>
+              <option value="UBA">UBA</option>
+              <option value="MTN SPECTRUM">MTN SPECTRUM</option>
+            </select>
+          </div>
+        )}
 
         {/* Amount Input */}
         <div className="bg-[#ffffff] p-4 sm:p-6 border border-[#e5e5e5] relative overflow-hidden">
@@ -420,7 +479,7 @@ export const NewCollectionView: React.FC<NewCollectionViewProps> = ({
           />
         </div>
 
-        {/* Receipt Upload Dropzone */}
+        {/* Money Photo Proof Dropzone */}
         <div
           onDragOver={handleDragOver}
           onDrop={handleDrop}
@@ -434,22 +493,22 @@ export const NewCollectionView: React.FC<NewCollectionViewProps> = ({
             className="hidden"
           />
 
-          <div className="w-16 h-16 mx-auto bg-[#f3f3f3] rounded-full flex items-center justify-center mb-3 text-[#4a4a4a] border border-[#e5e5e5]">
+          <div className="w-16 h-16 mx-auto bg-[#ecfeff] rounded-full flex items-center justify-center mb-3 text-[#0891b2] border border-[#a5f3fc]">
             <Camera className="w-7 h-7" />
           </div>
 
           <h3 className="text-lg font-bold text-[#1a1c1c] mb-1">
-            Upload Receipt / Slip
+            Upload Photo of Money Took (Proof)
           </h3>
           <p className="text-xs text-[#4a4a4a] mb-6">
-            Drag and drop or browse files
+            Take or upload a clear photo of the physical cash collected as proof.
           </p>
 
           {receiptFile ? (
-            <div className="inline-flex items-center gap-3 p-3 bg-[#f3f3f3] border border-[#e5e5e5] text-xs">
+            <div className="inline-flex items-center gap-3 p-3 bg-[#ecfeff] border border-[#a5f3fc] text-xs">
               <FileCheck className="w-4 h-4 text-[#0891b2]" />
-              <span className="font-mono font-medium text-[#1a1c1c] max-w-[200px] truncate">
-                {receiptFile.name}
+              <span className="font-mono font-bold text-[#0e7490] max-w-[200px] truncate">
+                Proof: {receiptFile.name}
               </span>
               <button
                 type="button"
@@ -463,9 +522,9 @@ export const NewCollectionView: React.FC<NewCollectionViewProps> = ({
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="bg-[#f9f9f9] text-[#1a1c1c] border border-[#e5e5e5] hover:bg-[#eeeeee] text-xs font-bold h-12 px-8 transition-colors uppercase tracking-widest cursor-pointer"
+              className="bg-[#0891b2] text-white border border-[#06b6d4] hover:bg-[#0e7490] text-xs font-bold h-12 px-8 transition-colors uppercase tracking-widest cursor-pointer shadow-sm"
             >
-              Select Photo
+              Upload Photo Proof
             </button>
           )}
         </div>
@@ -476,20 +535,11 @@ export const NewCollectionView: React.FC<NewCollectionViewProps> = ({
         <div className="max-w-3xl mx-auto flex gap-4">
           <button
             type="button"
-            onClick={() => handleSave(true)}
-            className="flex-1 bg-[#f9f9f9] text-[#1a1c1c] border border-[#e5e5e5] h-12 text-xs font-bold hover:bg-[#eeeeee] transition-colors flex items-center justify-center gap-2 uppercase tracking-widest cursor-pointer"
-          >
-            <Save className="w-4 h-4" />
-            <span>Save Draft</span>
-          </button>
-
-          <button
-            type="button"
             onClick={() => handleSave(false)}
-            className="flex-1 bg-[#0891b2] text-white h-12 text-xs font-bold hover:bg-[#0e7490] transition-colors flex items-center justify-center gap-2 uppercase tracking-widest cursor-pointer shadow-sm"
+            className="w-full bg-[#0891b2] text-white h-12 text-xs font-bold hover:bg-[#0e7490] transition-colors flex items-center justify-center gap-2 uppercase tracking-widest cursor-pointer shadow-sm"
           >
             <UploadCloud className="w-4 h-4" />
-            <span>Submit to API</span>
+            <span>Submit Collection Directly</span>
           </button>
         </div>
       </div>

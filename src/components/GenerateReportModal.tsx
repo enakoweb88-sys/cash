@@ -19,7 +19,7 @@ import {
   Check,
 } from 'lucide-react';
 import { Collection, CollectorUser, Client } from '../types';
-import { formatXAF, INITIAL_CLIENTS } from '../data/mockData';
+import { formatXAF } from '../data/mockData';
 import {
   ReportPeriod,
   filterCollectionsByPeriod,
@@ -41,7 +41,7 @@ export const GenerateReportModal: React.FC<GenerateReportModalProps> = ({
   collections,
   drafts,
   user,
-  clients = INITIAL_CLIENTS,
+  clients = [],
   onClose,
 }) => {
   const [selectedPeriod, setSelectedPeriod] = useState<ReportPeriod>('daily');
