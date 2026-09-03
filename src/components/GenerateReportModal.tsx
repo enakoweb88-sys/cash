@@ -17,6 +17,7 @@ import {
   Clock,
   MapPin,
   Check,
+  RotateCw,
 } from 'lucide-react';
 import { Collection, CollectorUser, Client } from '../types';
 import { formatXAF } from '../data/mockData';
@@ -47,6 +48,7 @@ export const GenerateReportModal: React.FC<GenerateReportModalProps> = ({
   const [selectedPeriod, setSelectedPeriod] = useState<ReportPeriod>('daily');
   const [downloadSuccessNotice, setDownloadSuccessNotice] = useState<string | null>(null);
   const [showExportMenu, setShowExportMenu] = useState(false);
+  const [isExporting, setIsExporting] = useState<string | null>(null);
 
   // Filter collections and calculate metrics based on chosen timeframe
   const { filtered, periodLabel, start, end } = useMemo(() => {
@@ -58,24 +60,36 @@ export const GenerateReportModal: React.FC<GenerateReportModalProps> = ({
   }, [filtered, drafts, clients, periodLabel, start, end]);
 
   const handleDownloadPDF = () => {
-    downloadReportPDF(filtered, metrics, user);
-    setDownloadSuccessNotice(`Downloaded ${selectedPeriod.toUpperCase()} Report as PDF`);
-    setShowExportMenu(false);
-    setTimeout(() => setDownloadSuccessNotice(null), 4000);
+    setIsExporting('pdf');
+    setTimeout(() => {
+      downloadReportPDF(filtered, metrics, user);
+      setDownloadSuccessNotice(`Downloaded ${selectedPeriod.toUpperCase()} Report as PDF`);
+      setShowExportMenu(false);
+      setIsExporting(null);
+      setTimeout(() => setDownloadSuccessNotice(null), 4000);
+    }, 350);
   };
 
   const handleDownloadExcel = () => {
-    downloadReportExcel(filtered, metrics, user);
-    setDownloadSuccessNotice(`Downloaded ${selectedPeriod.toUpperCase()} Report as Excel (.xlsx)`);
-    setShowExportMenu(false);
-    setTimeout(() => setDownloadSuccessNotice(null), 4000);
+    setIsExporting('excel');
+    setTimeout(() => {
+      downloadReportExcel(filtered, metrics, user);
+      setDownloadSuccessNotice(`Downloaded ${selectedPeriod.toUpperCase()} Report as Excel (.xlsx)`);
+      setShowExportMenu(false);
+      setIsExporting(null);
+      setTimeout(() => setDownloadSuccessNotice(null), 4000);
+    }, 350);
   };
 
   const handleDownloadWord = () => {
-    downloadReportWord(filtered, metrics, user);
-    setDownloadSuccessNotice(`Downloaded ${selectedPeriod.toUpperCase()} Report as Word (.doc)`);
-    setShowExportMenu(false);
-    setTimeout(() => setDownloadSuccessNotice(null), 4000);
+    setIsExporting('word');
+    setTimeout(() => {
+      downloadReportWord(filtered, metrics, user);
+      setDownloadSuccessNotice(`Downloaded ${selectedPeriod.toUpperCase()} Report as Word (.doc)`);
+      setShowExportMenu(false);
+      setIsExporting(null);
+      setTimeout(() => setDownloadSuccessNotice(null), 4000);
+    }, 350);
   };
 
   const handlePrint = () => {
@@ -445,33 +459,48 @@ export const GenerateReportModal: React.FC<GenerateReportModalProps> = ({
                 <div className="absolute right-0 bottom-full mb-1.5 w-56 bg-[#ffffff] border border-[#e5e5e5] shadow-2xl z-50 py-1 font-mono text-xs">
                   <button
                     onClick={handleDownloadPDF}
-                    className="w-full px-3.5 py-2.5 text-left hover:bg-[#ecfeff] flex items-center gap-2.5 text-[#1a1c1c] border-b border-[#f3f3f3]"
+                    disabled={!!isExporting}
+                    className="w-full px-3.5 py-2.5 text-left hover:bg-[#ecfeff] flex items-center gap-2.5 text-[#1a1c1c] border-b border-[#f3f3f3] disabled:opacity-50"
                   >
-                    <FileText className="w-4 h-4 text-[#0891b2]" />
+                    {isExporting === 'pdf' ? (
+                      <RotateCw className="w-4 h-4 text-[#0891b2] animate-spin" />
+                    ) : (
+                      <FileText className="w-4 h-4 text-[#0891b2]" />
+                    )}
                     <div>
-                      <div className="font-bold">PDF Document (.pdf)</div>
+                      <div className="font-bold">{isExporting === 'pdf' ? 'Generating PDF...' : 'PDF Document (.pdf)'}</div>
                       <div className="text-[10px] text-[#5f5e5e] font-sans">Formal letterhead & tables</div>
                     </div>
                   </button>
 
                   <button
                     onClick={handleDownloadExcel}
-                    className="w-full px-3.5 py-2.5 text-left hover:bg-[#ecfeff] flex items-center gap-2.5 text-[#1a1c1c] border-b border-[#f3f3f3]"
+                    disabled={!!isExporting}
+                    className="w-full px-3.5 py-2.5 text-left hover:bg-[#ecfeff] flex items-center gap-2.5 text-[#1a1c1c] border-b border-[#f3f3f3] disabled:opacity-50"
                   >
-                    <FileSpreadsheet className="w-4 h-4 text-[#0891b2]" />
+                    {isExporting === 'excel' ? (
+                      <RotateCw className="w-4 h-4 text-[#0891b2] animate-spin" />
+                    ) : (
+                      <FileSpreadsheet className="w-4 h-4 text-[#0891b2]" />
+                    )}
                     <div>
-                      <div className="font-bold">Excel Workbook (.xlsx)</div>
+                      <div className="font-bold">{isExporting === 'excel' ? 'Generating Excel...' : 'Excel Workbook (.xlsx)'}</div>
                       <div className="text-[10px] text-[#5f5e5e] font-sans">KPI sheets & full data logs</div>
                     </div>
                   </button>
 
                   <button
                     onClick={handleDownloadWord}
-                    className="w-full px-3.5 py-2.5 text-left hover:bg-[#ecfeff] flex items-center gap-2.5 text-[#1a1c1c]"
+                    disabled={!!isExporting}
+                    className="w-full px-3.5 py-2.5 text-left hover:bg-[#ecfeff] flex items-center gap-2.5 text-[#1a1c1c] disabled:opacity-50"
                   >
-                    <FileText className="w-4 h-4 text-[#0891b2]" />
+                    {isExporting === 'word' ? (
+                      <RotateCw className="w-4 h-4 text-[#0891b2] animate-spin" />
+                    ) : (
+                      <FileText className="w-4 h-4 text-[#0891b2]" />
+                    )}
                     <div>
-                      <div className="font-bold">Word Document (.doc)</div>
+                      <div className="font-bold">{isExporting === 'word' ? 'Generating Word...' : 'Word Document (.doc)'}</div>
                       <div className="text-[10px] text-[#5f5e5e] font-sans">Editable executive report</div>
                     </div>
                   </button>

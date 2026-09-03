@@ -75,7 +75,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           {onOpenReport && (
             <button
               onClick={onOpenReport}
-              className="flex-1 md:flex-none h-12 px-5 bg-[#ffffff] border border-[#0891b2] text-[#0891b2] hover:bg-[#ecfeff] text-xs font-bold tracking-wider uppercase flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-2xs"
+              className="flex-1 md:flex-none h-12 px-5 bg-[#ffffff] border border-[#0891b2] text-[#0891b2] hover:bg-[#ecfeff] active:scale-[0.98] text-xs font-bold tracking-wider uppercase flex items-center justify-center gap-2 transition-all cursor-pointer shadow-2xs"
             >
               <FileText className="w-4 h-4 text-[#0891b2]" />
               <span>General Report</span>
@@ -84,7 +84,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
           <button
             onClick={() => onNavigate('new-collection')}
-            className="flex-1 md:flex-none h-12 px-6 bg-[#0891b2] hover:bg-[#0e7490] text-white text-xs font-bold tracking-wider uppercase flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-sm"
+            className="flex-1 md:flex-none h-12 px-6 bg-[#0891b2] hover:bg-[#0e7490] active:scale-[0.98] text-white text-xs font-bold tracking-wider uppercase flex items-center justify-center gap-2 transition-all cursor-pointer shadow-sm"
           >
             <Plus className="w-4 h-4 stroke-[3]" />
             <span>Start New Collection</span>
@@ -392,7 +392,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             disabled={drafts.length === 0 || isSyncing}
             className={`w-full h-12 mt-4 text-xs font-bold tracking-wider uppercase flex items-center justify-center gap-2 border transition-all ${
               drafts.length > 0
-                ? 'bg-[#0891b2] hover:bg-[#0e7490] text-white border-[#06b6d4] cursor-pointer shadow-sm'
+                ? 'bg-[#0891b2] hover:bg-[#0e7490] active:scale-[0.98] text-white border-[#06b6d4] cursor-pointer shadow-sm'
                 : 'bg-[#f9f9f9] text-[#c8c6c5] border-[#e5e5e5] cursor-not-allowed'
             }`}
           >

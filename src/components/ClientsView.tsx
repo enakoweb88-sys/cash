@@ -11,7 +11,8 @@ import {
   Filter,
   X,
   Phone,
-  Mail
+  Mail,
+  RotateCw
 } from 'lucide-react';
 import { Client, FilterOptions } from '../types';
 import { formatXAF, formatCommaNumber, cleanCommas } from '../data/mockData';
@@ -34,6 +35,7 @@ export const ClientsView: React.FC<ClientsViewProps> = ({
   });
 
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [newClientName, setNewClientName] = useState('');
   const [newClientAddress, setNewClientAddress] = useState('');
   const [newClientRegion, setNewClientRegion] = useState<Client['region']>('Douala');
@@ -77,23 +79,27 @@ export const ClientsView: React.FC<ClientsViewProps> = ({
     e.preventDefault();
     if (!newClientName.trim() || !newClientAddress.trim()) return;
 
-    onAddNewClient({
-      name: newClientName.trim(),
-      address: newClientAddress.trim(),
-      region: newClientRegion,
-      lastVisit: 'Never',
-      outstandingBalance: Number(cleanCommas(newClientBalance)) || 0,
-      phone: newClientPhone.trim() || undefined,
-      email: newClientEmail.trim() || undefined,
-    });
+    setIsSubmitting(true);
+    setTimeout(() => {
+      onAddNewClient({
+        name: newClientName.trim(),
+        address: newClientAddress.trim(),
+        region: newClientRegion,
+        lastVisit: 'Never',
+        outstandingBalance: Number(cleanCommas(newClientBalance)) || 0,
+        phone: newClientPhone.trim() || undefined,
+        email: newClientEmail.trim() || undefined,
+      });
 
-    // Reset form
-    setNewClientName('');
-    setNewClientAddress('');
-    setNewClientBalance('0');
-    setNewClientPhone('');
-    setNewClientEmail('');
-    setIsAddModalOpen(false);
+      // Reset form
+      setNewClientName('');
+      setNewClientAddress('');
+      setNewClientBalance('0');
+      setNewClientPhone('');
+      setNewClientEmail('');
+      setIsSubmitting(false);
+      setIsAddModalOpen(false);
+    }, 350);
   };
 
   // Helper for initials
@@ -357,9 +363,17 @@ export const ClientsView: React.FC<ClientsViewProps> = ({
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-2.5 bg-[#0891b2] hover:bg-[#0e7490] text-white text-xs font-bold uppercase tracking-wider shadow-sm"
+                  disabled={isSubmitting}
+                  className="px-6 py-2.5 bg-[#0891b2] hover:bg-[#0e7490] active:scale-[0.98] text-white text-xs font-bold uppercase tracking-wider shadow-sm cursor-pointer flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed transition-all"
                 >
-                  Save Client
+                  {isSubmitting ? (
+                    <>
+                      <RotateCw className="w-3.5 h-3.5 animate-spin" />
+                      <span>Saving Client...</span>
+                    </>
+                  ) : (
+                    <span>Save Client</span>
+                  )}
                 </button>
               </div>
             </form>

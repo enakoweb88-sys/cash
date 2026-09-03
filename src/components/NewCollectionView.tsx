@@ -11,7 +11,8 @@ import {
   Crosshair, 
   AlertCircle, 
   FileCheck, 
-  Calendar 
+  Calendar,
+  RotateCw
 } from 'lucide-react';
 import { Client, Collection, TransactionStatus, ViewType, TransactionType, DepositDestination } from '../types';
 import { formatXAF, formatCommaNumber, cleanCommas } from '../data/mockData';
@@ -44,6 +45,7 @@ export const NewCollectionView: React.FC<NewCollectionViewProps> = ({
   );
   const [location, setLocation] = useState<string>(initialSelectedClient ? initialSelectedClient.address : '');
   const [isLocating, setIsLocating] = useState<boolean>(false);
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
   // Format current local time in ISO string for datetime-local
   const getCurrentDateTimeLocal = () => {
@@ -55,7 +57,7 @@ export const NewCollectionView: React.FC<NewCollectionViewProps> = ({
   const [collectionTime, setCollectionTime] = useState<string>(getCurrentDateTimeLocal());
   const [transactionState, setTransactionState] = useState<TransactionStatus>('COMPLETE');
   const [transactionType, setTransactionType] = useState<TransactionType>('COLLECTING');
-  const [depositDestination, setDepositDestination] = useState<DepositDestination>('AFRILAND FIRST BANK');
+  const [depositDestination, setDepositDestination] = useState<DepositDestination | ''>('');
   const [notes, setNotes] = useState<string>('');
   
   // Receipt file upload
@@ -161,6 +163,10 @@ export const NewCollectionView: React.FC<NewCollectionViewProps> = ({
       setErrorMessage('Please enter a valid collection amount in XAF.');
       return false;
     }
+    if (transactionType === 'COLLECTING' && !depositDestination) {
+      setErrorMessage('Please select a Deposit Location / Destination Bank.');
+      return false;
+    }
     return true;
   };
 
@@ -168,28 +174,32 @@ export const NewCollectionView: React.FC<NewCollectionViewProps> = ({
     if (!validateForm()) return;
     if (!selectedClient) return;
 
-    const numAmount = Number(cleanCommas(amount));
-    const dateObj = new Date(collectionTime);
-    const timeFormatted = `${dateObj.getHours().toString().padStart(2, '0')}:${dateObj.getMinutes().toString().padStart(2, '0')}`;
+    setIsSubmitting(true);
+    setTimeout(() => {
+      const numAmount = Number(cleanCommas(amount));
+      const dateObj = new Date(collectionTime);
+      const timeFormatted = `${dateObj.getHours().toString().padStart(2, '0')}:${dateObj.getMinutes().toString().padStart(2, '0')}`;
 
-    onSaveCollection(
-      {
-        clientId: selectedClient.id,
-        clientName: selectedClient.name,
-        amount: numAmount,
-        time: timeFormatted,
-        timestamp: dateObj.toISOString(),
-        status: isDraft ? 'PENDING' : transactionState,
-        type: transactionType,
-        depositDestination: transactionType === 'COLLECTING' ? depositDestination : undefined,
-        location: location || selectedClient.address,
-        notes: notes || undefined,
-        receiptName: receiptFile?.name,
-        receiptUrl: receiptFile?.url,
-        isDraft: isDraft,
-      },
-      isDraft
-    );
+      onSaveCollection(
+        {
+          clientId: selectedClient.id,
+          clientName: selectedClient.name,
+          amount: numAmount,
+          time: timeFormatted,
+          timestamp: dateObj.toISOString(),
+          status: isDraft ? 'PENDING' : transactionState,
+          type: transactionType,
+          depositDestination: transactionType === 'COLLECTING' ? (depositDestination as DepositDestination) : undefined,
+          location: location || selectedClient.address,
+          notes: notes || undefined,
+          receiptName: receiptFile?.name,
+          receiptUrl: receiptFile?.url,
+          isDraft: isDraft,
+        },
+        isDraft
+      );
+      setIsSubmitting(false);
+    }, 400);
   };
 
   const outstandingBal = selectedClient ? selectedClient.outstandingBalance : 0;
@@ -335,9 +345,13 @@ export const NewCollectionView: React.FC<NewCollectionViewProps> = ({
             <select
               id="deposit_destination"
               value={depositDestination}
-              onChange={(e) => setDepositDestination(e.target.value as DepositDestination)}
+              onChange={(e) => {
+                setDepositDestination(e.target.value as DepositDestination);
+                setErrorMessage(null);
+              }}
               className="w-full h-12 px-4 bg-[#ffffff] border border-[#e5e5e5] focus:border-[#0891b2] focus:ring-1 focus:ring-[#0891b2] text-sm text-[#1a1c1c] font-bold outline-none cursor-pointer"
             >
+              <option value="">-- Select Bank / Deposit Location --</option>
               <option value="ECOBANK">ECOBANK</option>
               <option value="AFRILAND FIRST BANK">AFRILAND FIRST BANK</option>
               <option value="UBA">UBA</option>
@@ -535,11 +549,21 @@ export const NewCollectionView: React.FC<NewCollectionViewProps> = ({
         <div className="max-w-3xl mx-auto flex gap-4">
           <button
             type="button"
+            disabled={isSubmitting}
             onClick={() => handleSave(false)}
-            className="w-full bg-[#0891b2] text-white h-12 text-xs font-bold hover:bg-[#0e7490] transition-colors flex items-center justify-center gap-2 uppercase tracking-widest cursor-pointer shadow-sm"
+            className="w-full bg-[#0891b2] text-white h-12 text-xs font-bold hover:bg-[#0e7490] active:scale-[0.99] transition-all flex items-center justify-center gap-2 uppercase tracking-widest cursor-pointer shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            <UploadCloud className="w-4 h-4" />
-            <span>Submit Collection Directly</span>
+            {isSubmitting ? (
+              <>
+                <RotateCw className="w-4 h-4 animate-spin text-white" />
+                <span>Submitting Collection...</span>
+              </>
+            ) : (
+              <>
+                <UploadCloud className="w-4 h-4" />
+                <span>Submit Collection Directly</span>
+              </>
+            )}
           </button>
         </div>
       </div>

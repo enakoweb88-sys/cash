@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, CheckCircle, AlertTriangle, FileText, DollarSign } from 'lucide-react';
+import { X, CheckCircle, AlertTriangle, FileText, DollarSign, RotateCw } from 'lucide-react';
 import { Collection, TransactionStatus } from '../types';
 import { formatXAF, formatCommaNumber, cleanCommas } from '../data/mockData';
 
@@ -32,20 +32,26 @@ export const StatusUpdateModal: React.FC<StatusUpdateModalProps> = ({
   const [summaryNote, setSummaryNote] = useState<string>(
     collection.summaryNote || collection.notes || ''
   );
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const shortageNum = Math.max(0, Number(shortageAmount) || 0);
-    const extraNum = Math.max(0, Number(extraAmount) || 0);
+    setIsSubmitting(true);
+    setTimeout(() => {
+      const shortageNum = Math.max(0, Number(cleanCommas(shortageAmount)) || 0);
+      const extraNum = Math.max(0, Number(cleanCommas(extraAmount)) || 0);
 
-    onSaveStatus(
-      collection.id,
-      status,
-      shortageNum,
-      extraNum,
-      summaryNote.trim()
-    );
-    onClose();
+      onSaveStatus(
+      onSaveStatus(
+        collection.id,
+        status,
+        shortageNum,
+        extraNum,
+        summaryNote.trim()
+      );
+      setIsSubmitting(false);
+      onClose();
+    }, 350);
   };
 
   return (
@@ -144,9 +150,17 @@ export const StatusUpdateModal: React.FC<StatusUpdateModalProps> = ({
             </button>
             <button
               type="submit"
-              className="px-6 py-2.5 bg-[#0891b2] hover:bg-[#0e7490] text-white text-xs font-bold uppercase tracking-wider shadow-sm cursor-pointer"
+              disabled={isSubmitting}
+              className="px-6 py-2.5 bg-[#0891b2] hover:bg-[#0e7490] active:scale-[0.98] text-white text-xs font-bold uppercase tracking-wider shadow-sm cursor-pointer flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed transition-all"
             >
-              Save Status Update
+              {isSubmitting ? (
+                <>
+                  <RotateCw className="w-3.5 h-3.5 animate-spin" />
+                  <span>Updating Status...</span>
+                </>
+              ) : (
+                <span>Save Status Update</span>
+              )}
             </button>
           </div>
         </form>
