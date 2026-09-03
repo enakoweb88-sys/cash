@@ -161,7 +161,38 @@ export default function App() {
     showToast('Signed out of terminal successfully.', 'info');
   };
 
-  // Save new collection and submit directly to central backend API
+  // Syncing state
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  // Sync offline drafts to backend
+  const handleSyncDrafts = async () => {
+    if (drafts.length === 0) return;
+    setIsSyncing(true);
+    let successCount = 0;
+    const remainingDrafts: Collection[] = [];
+    const syncedCollections: Collection[] = [];
+
+    for (const draft of drafts) {
+      const ok = await createRemoteCollection(draft);
+      if (ok) {
+        successCount++;
+        syncedCollections.push({ ...draft, isDraft: false });
+      } else {
+        remainingDrafts.push(draft);
+      }
+    }
+
+    if (successCount > 0) {
+      setCollections((prev) => [...syncedCollections, ...prev]);
+      setDrafts(remainingDrafts);
+      showToast(`Successfully synced ${successCount} draft(s) to central system!`, 'success');
+    } else {
+      showToast('Could not sync drafts. Backend server unreachable or offline.', 'error');
+    }
+    setIsSyncing(false);
+  };
+
+  // Save new collection and submit directly to central backend API or save as draft
   const handleSaveCollection = (data: Omit<Collection, 'id'>, isDraft: boolean) => {
     const randomIdNum = Math.floor(1000 + Math.random() * 9000);
     const newId = `COL-${randomIdNum}`;
@@ -169,8 +200,16 @@ export default function App() {
     const newRecord: Collection = {
       ...data,
       id: newId,
-      isDraft: false,
+      isDraft: isDraft,
     };
+
+    if (isDraft) {
+      setDrafts((prev) => [newRecord, ...prev]);
+      showToast(`Draft ${newId} saved offline in local queue.`, 'info');
+      setCurrentView('dashboard');
+      setSelectedClientForCollection(null);
+      return;
+    }
 
     // Add to local state
     setCollections((prev) => [newRecord, ...prev]);
@@ -321,9 +360,9 @@ export default function App() {
           user={user}
           isOffline={false}
           onToggleOffline={() => {}}
-          isSyncing={false}
-          onSync={() => {}}
-          pendingDraftCount={0}
+          isSyncing={isSyncing}
+          onSync={handleSyncDrafts}
+          pendingDraftCount={drafts.length}
           onOpenSettings={() => setIsSettingsModalOpen(true)}
           onOpenProfile={() => setIsProfileModalOpen(true)}
           onOpenMobileMenu={() => setMobileMenuOpen(true)}
@@ -369,9 +408,9 @@ export default function App() {
               }}
               onSelectCollection={(col) => setActiveReceipt(col)}
               onOpenStatusUpdate={(col) => setStatusUpdateCollection(col)}
-              onSyncDrafts={() => {}}
-              isSyncing={false}
-              onDeleteDraft={() => {}}
+              onSyncDrafts={handleSyncDrafts}
+              isSyncing={isSyncing}
+              onDeleteDraft={handleDeleteDraft}
               onOpenReport={() => setIsReportModalOpen(true)}
             />
           )}

@@ -370,10 +370,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                         e.stopPropagation();
                         onDeleteDraft(draft.id);
                       }}
-                      className="text-[#5f5e5e] hover:text-[#0891b2] p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                      className="text-[#5f5e5e] hover:text-[#ba1a1a] p-1.5 rounded hover:bg-[#ffdad6]/40 transition-all cursor-pointer ml-1"
                       title="Discard draft"
                     >
-                      <Trash2 className="w-3.5 h-3.5" />
+                      <Trash2 className="w-4 h-4 text-[#ba1a1a]" />
                     </button>
                   )}
                 </div>
