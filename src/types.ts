@@ -41,10 +41,26 @@ export interface CollectorUser {
   id: string;
   name: string;
   email: string;
+  phone?: string;
   terminalId: string;
   branch: string;
+  role?: string;
   avatarLetter: string;
   isLoggedIn: boolean;
+}
+
+export interface UserAccount {
+  id: string;
+  firstName: string;
+  lastName: string;
+  fullName: string;
+  email: string;
+  phone?: string;
+  password?: string;
+  branch: string;
+  role: string;
+  terminalId: string;
+  createdAt: string;
 }
 
 export interface FilterOptions {

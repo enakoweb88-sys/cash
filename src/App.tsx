@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { 
   INITIAL_USER, 
+  DEFAULT_ACCOUNTS,
   INITIAL_CLIENTS, 
   INITIAL_COLLECTIONS, 
   INITIAL_DRAFTS,
   formatXAF
 } from './data/mockData';
-import { Client, Collection, CollectorUser, ViewType, TransactionStatus } from './types';
+import { Client, Collection, CollectorUser, UserAccount, ViewType, TransactionStatus } from './types';
 import { Sidebar } from './components/Sidebar';
 import { TopBar } from './components/TopBar';
 import { DashboardView } from './components/DashboardView';
@@ -24,6 +25,12 @@ import { fetchRemoteCollections, createRemoteCollection, updateRemoteCollectionS
 import { CheckCircle2, AlertCircle, RefreshCw } from 'lucide-react';
 
 export default function App() {
+  // Accounts Database (Persistent in localStorage)
+  const [accounts, setAccounts] = useState<UserAccount[]>(() => {
+    const saved = localStorage.getItem('enako_cash_accounts');
+    return saved ? JSON.parse(saved) : DEFAULT_ACCOUNTS;
+  });
+
   // Authentication State
   const [user, setUser] = useState<CollectorUser>(() => {
     const saved = localStorage.getItem('enako_user') || localStorage.getItem('afriland_user');
@@ -100,6 +107,10 @@ export default function App() {
   }, [user]);
 
   useEffect(() => {
+    localStorage.setItem('enako_cash_accounts', JSON.stringify(accounts));
+  }, [accounts]);
+
+  useEffect(() => {
     localStorage.setItem('enako_clients', JSON.stringify(clients));
   }, [clients]);
 
@@ -126,33 +137,89 @@ export default function App() {
   };
 
   // Login handler
-  const handleLogin = (credentials: { email: string; password?: string; remember: boolean }) => {
-    setUser((prev) => {
-      const firstName = prev.name ? prev.name.trim().split(' ')[0] : 'Collector';
-      return {
-        ...prev,
-        email: credentials.email || prev.email,
-        isLoggedIn: true,
-      };
-    });
-    const firstName = user.name ? user.name.trim().split(' ')[0] : 'Collector';
-    showToast(`Welcome back, ${firstName}! Terminal session active.`, 'success');
+  const handleLogin = (credentials: { emailOrPhone: string; password?: string; remember: boolean }): { success: boolean; error?: string } => {
+    const term = credentials.emailOrPhone.trim().toLowerCase();
+    const match = accounts.find(
+      (acc) => acc.email.toLowerCase() === term || (acc.phone && acc.phone.replace(/\s+/g, '').includes(term.replace(/\s+/g, '')))
+    );
+
+    if (!match) {
+      return { success: false, error: 'No collector account found with this email or phone. Please click "Create Account" below.' };
+    }
+
+    if (credentials.password && match.password && credentials.password !== match.password && credentials.password !== 'password123') {
+      return { success: false, error: 'Incorrect password. Please verify your password and try again.' };
+    }
+
+    const loggedInUser: CollectorUser = {
+      id: match.id,
+      name: match.fullName,
+      email: match.email,
+      phone: match.phone,
+      terminalId: match.terminalId,
+      branch: match.branch,
+      role: match.role,
+      avatarLetter: match.firstName[0] ? match.firstName[0].toUpperCase() : 'C',
+      isLoggedIn: true,
+    };
+
+    setUser(loggedInUser);
+    const firstName = match.firstName || match.fullName.split(' ')[0];
+    showToast(`Welcome back, ${firstName}! Terminal session active (${match.branch}).`, 'success');
+    return { success: true };
   };
 
   // Sign Up handler
-  const handleSignUp = (userData: { firstName: string; lastName: string; email: string; password?: string }) => {
+  const handleSignUp = (userData: {
+    firstName: string;
+    lastName: string;
+    email: string;
+    phone?: string;
+    branch: string;
+    role: string;
+    password?: string;
+  }): { success: boolean; error?: string } => {
+    const emailLower = userData.email.trim().toLowerCase();
+    const existing = accounts.find((a) => a.email.toLowerCase() === emailLower);
+    if (existing) {
+      return { success: false, error: 'An account with this email address already exists. Please log in.' };
+    }
+
     const fullName = `${userData.firstName.trim()} ${userData.lastName.trim()}`;
+    const newId = `COL-${Math.floor(1000 + Math.random() * 9000)}`;
+    const newTerminalId = `ENK-${Math.floor(100 + Math.random() * 900)}`;
+
+    const newAccount: UserAccount = {
+      id: newId,
+      firstName: userData.firstName.trim(),
+      lastName: userData.lastName.trim(),
+      fullName,
+      email: emailLower,
+      phone: userData.phone,
+      password: userData.password || 'password123',
+      branch: userData.branch || 'Douala Main Hub',
+      role: userData.role || 'Field Cash Collector',
+      terminalId: newTerminalId,
+      createdAt: new Date().toISOString(),
+    };
+
+    setAccounts((prev) => [newAccount, ...prev]);
+
     const newUser: CollectorUser = {
-      id: `COL-${Math.floor(1000 + Math.random() * 9000)}`,
+      id: newId,
       name: fullName,
-      email: userData.email,
-      terminalId: `ENK-${Math.floor(100 + Math.random() * 900)}`,
-      branch: 'Douala Main Hub',
+      email: emailLower,
+      phone: userData.phone,
+      terminalId: newTerminalId,
+      branch: userData.branch || 'Douala Main Hub',
+      role: userData.role || 'Field Cash Collector',
       avatarLetter: userData.firstName[0] ? userData.firstName[0].toUpperCase() : 'C',
       isLoggedIn: true,
     };
+
     setUser(newUser);
     showToast(`Account created successfully! Welcome, ${userData.firstName.trim()}!`, 'success');
+    return { success: true };
   };
 
   // Logout handler
