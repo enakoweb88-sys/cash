@@ -14,7 +14,7 @@ import {
   Calendar 
 } from 'lucide-react';
 import { Client, Collection, TransactionStatus, ViewType, TransactionType, DepositDestination } from '../types';
-import { formatXAF } from '../data/mockData';
+import { formatXAF, formatCommaNumber, cleanCommas } from '../data/mockData';
 
 interface NewCollectionViewProps {
   clients: Client[];
@@ -156,7 +156,7 @@ export const NewCollectionView: React.FC<NewCollectionViewProps> = ({
       setErrorMessage('Please select a valid client from the directory or search.');
       return false;
     }
-    const numAmount = Number(amount);
+    const numAmount = Number(cleanCommas(amount));
     if (isNaN(numAmount) || numAmount <= 0) {
       setErrorMessage('Please enter a valid collection amount in XAF.');
       return false;
@@ -168,7 +168,7 @@ export const NewCollectionView: React.FC<NewCollectionViewProps> = ({
     if (!validateForm()) return;
     if (!selectedClient) return;
 
-    const numAmount = Number(amount);
+    const numAmount = Number(cleanCommas(amount));
     const dateObj = new Date(collectionTime);
     const timeFormatted = `${dateObj.getHours().toString().padStart(2, '0')}:${dateObj.getMinutes().toString().padStart(2, '0')}`;
 
@@ -363,10 +363,10 @@ export const NewCollectionView: React.FC<NewCollectionViewProps> = ({
                 </span>
                 <input
                   id="amount"
-                  type="number"
-                  value={amount}
+                  type="text"
+                  value={formatCommaNumber(amount)}
                   onChange={(e) => {
-                    setAmount(e.target.value);
+                    setAmount(cleanCommas(e.target.value));
                     setErrorMessage(null);
                   }}
                   placeholder="0"

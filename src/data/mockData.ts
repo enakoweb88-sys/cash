@@ -47,7 +47,23 @@ export const INITIAL_COLLECTIONS: Collection[] = [];
 
 export const INITIAL_DRAFTS: Collection[] = [];
 
-export function formatXAF(amount: number): string {
-  return new Intl.NumberFormat('en-US').format(amount);
+export function formatXAF(amount: number | string | null | undefined): string {
+  if (amount === undefined || amount === null || amount === '') return '0';
+  const n = Number(String(amount).replace(/,/g, ''));
+  if (isNaN(n)) return '0';
+  return new Intl.NumberFormat('en-US').format(n);
+}
+
+export function formatCommaNumber(value: string | number | undefined | null): string {
+  if (value === undefined || value === null || value === '') return '';
+  const str = String(value).replace(/,/g, '');
+  if (isNaN(Number(str)) && str !== '-') return String(value);
+  const parts = str.split('.');
+  parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return parts.join('.');
+}
+
+export function cleanCommas(value: string | number | undefined | null): string {
+  return String(value || '').replace(/,/g, '');
 }
 

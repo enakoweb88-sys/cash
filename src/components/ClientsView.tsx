@@ -14,7 +14,7 @@ import {
   Mail
 } from 'lucide-react';
 import { Client, FilterOptions } from '../types';
-import { formatXAF } from '../data/mockData';
+import { formatXAF, formatCommaNumber, cleanCommas } from '../data/mockData';
 
 interface ClientsViewProps {
   clients: Client[];
@@ -82,7 +82,7 @@ export const ClientsView: React.FC<ClientsViewProps> = ({
       address: newClientAddress.trim(),
       region: newClientRegion,
       lastVisit: 'Never',
-      outstandingBalance: Number(newClientBalance) || 0,
+      outstandingBalance: Number(cleanCommas(newClientBalance)) || 0,
       phone: newClientPhone.trim() || undefined,
       email: newClientEmail.trim() || undefined,
     });
@@ -310,11 +310,11 @@ export const ClientsView: React.FC<ClientsViewProps> = ({
                     Initial Balance (XAF)
                   </label>
                   <input
-                    type="number"
-                    value={newClientBalance}
-                    onChange={(e) => setNewClientBalance(e.target.value)}
+                    type="text"
+                    value={formatCommaNumber(newClientBalance)}
+                    onChange={(e) => setNewClientBalance(cleanCommas(e.target.value))}
                     placeholder="0"
-                    className="w-full h-11 px-3 bg-[#ffffff] border border-[#e5e5e5] focus:border-[#0891b2] focus:ring-1 focus:ring-[#0891b2] outline-none text-sm font-mono"
+                    className="w-full h-11 px-3 bg-[#ffffff] border border-[#e5e5e5] focus:border-[#0891b2] focus:ring-1 focus:ring-[#0891b2] outline-none text-sm font-mono font-bold"
                   />
                 </div>
               </div>

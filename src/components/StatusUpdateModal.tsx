@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { X, CheckCircle, AlertTriangle, FileText, DollarSign } from 'lucide-react';
 import { Collection, TransactionStatus } from '../types';
-import { formatXAF } from '../data/mockData';
+import { formatXAF, formatCommaNumber, cleanCommas } from '../data/mockData';
 
 interface StatusUpdateModalProps {
   collection: Collection | null;
@@ -94,12 +94,11 @@ export const StatusUpdateModal: React.FC<StatusUpdateModalProps> = ({
                 Money Shortage (FCFA)
               </label>
               <input
-                type="number"
-                min="0"
-                value={shortageAmount}
-                onChange={(e) => setShortageAmount(e.target.value)}
+                type="text"
+                value={formatCommaNumber(shortageAmount)}
+                onChange={(e) => setShortageAmount(cleanCommas(e.target.value))}
                 placeholder="0"
-                className="w-full h-11 px-3 bg-[#ffffff] border border-[#e5e5e5] focus:border-[#ba1a1a] focus:ring-1 focus:ring-[#ba1a1a] text-sm font-mono"
+                className="w-full h-11 px-3 bg-[#ffffff] border border-[#e5e5e5] focus:border-[#ba1a1a] focus:ring-1 focus:ring-[#ba1a1a] text-sm font-mono font-bold"
               />
               <p className="text-[10px] text-[#5f5e5e] mt-1">Deficit in cash taken</p>
             </div>
@@ -109,12 +108,11 @@ export const StatusUpdateModal: React.FC<StatusUpdateModalProps> = ({
                 Money Extra (FCFA)
               </label>
               <input
-                type="number"
-                min="0"
-                value={extraAmount}
-                onChange={(e) => setExtraAmount(e.target.value)}
+                type="text"
+                value={formatCommaNumber(extraAmount)}
+                onChange={(e) => setExtraAmount(cleanCommas(e.target.value))}
                 placeholder="0"
-                className="w-full h-11 px-3 bg-[#ffffff] border border-[#e5e5e5] focus:border-[#0891b2] focus:ring-1 focus:ring-[#0891b2] text-sm font-mono"
+                className="w-full h-11 px-3 bg-[#ffffff] border border-[#e5e5e5] focus:border-[#0891b2] focus:ring-1 focus:ring-[#0891b2] text-sm font-mono font-bold"
               />
               <p className="text-[10px] text-[#5f5e5e] mt-1">Excess cash surplus</p>
             </div>
