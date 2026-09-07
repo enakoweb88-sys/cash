@@ -567,10 +567,13 @@ export function downloadReportWord(
 // -------------------------------------------------------------
 
 export function downloadReceiptPDF(collection: Collection, user: CollectorUser) {
+  const noteText = collection.summaryNote || collection.notes || '';
+  const hasNotes = noteText.trim().length > 0;
+  
   const doc = new jsPDF({
     orientation: 'portrait',
     unit: 'mm',
-    format: [80, 140], // Compact thermal POS slip size or standard receipt format
+    format: [80, hasNotes ? 165 : 140], // POS slip size with optional height extension for notes
   });
 
   // Header
@@ -644,6 +647,27 @@ export function downloadReceiptPDF(collection: Collection, user: CollectorUser) 
     addRow('Location:', collection.location.substring(0, 20));
   }
 
+  // Written Notes Section
+  if (hasNotes) {
+    y += 1;
+    doc.setFillColor(248, 250, 252);
+    doc.roundedRect(6, y, 68, 18, 1, 1, 'F');
+    doc.setDrawColor(226, 232, 240);
+    doc.roundedRect(6, y, 68, 18, 1, 1, 'S');
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(6);
+    doc.setTextColor(8, 145, 178);
+    doc.text('COLLECTOR SUMMARY NOTE:', 8, y + 4);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(6);
+    doc.setTextColor(30, 41, 59);
+    const splitNotes = doc.splitTextToSize(noteText, 64);
+    doc.text(splitNotes, 8, y + 8);
+    y += 20;
+  }
+
   // Barcode / verification
   doc.setDrawColor(200, 200, 200);
   doc.line(8, y + 4, 72, y + 4);
@@ -662,6 +686,7 @@ export function downloadReceiptPDF(collection: Collection, user: CollectorUser) 
 }
 
 export function downloadReceiptExcel(collection: Collection, user: CollectorUser) {
+  const noteText = collection.summaryNote || collection.notes || 'None';
   const wb = XLSX.utils.book_new();
   const rows = [
     ['E-NAKO - TRANSACTION RECEIPT SLIP'],
@@ -674,7 +699,7 @@ export function downloadReceiptExcel(collection: Collection, user: CollectorUser
     ['Transaction Date:', new Date(collection.timestamp || Date.now()).toLocaleDateString('en-GB')],
     ['Transaction Time:', new Date(collection.timestamp || Date.now()).toLocaleTimeString()],
     ['Location / GPS:', collection.location || 'Field Point'],
-    ['Field Notes:', collection.notes || 'None'],
+    ['Collector Notes / Summary:', noteText],
     [],
     ['Collector Name:', user.name],
     ['Collector ID:', user.id],
@@ -689,6 +714,7 @@ export function downloadReceiptExcel(collection: Collection, user: CollectorUser
 }
 
 export function downloadReceiptWord(collection: Collection, user: CollectorUser) {
+  const noteText = collection.summaryNote || collection.notes || '';
   const wordContent = `
     <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
     <head>
@@ -729,7 +755,7 @@ export function downloadReceiptWord(collection: Collection, user: CollectorUser)
           <tr><td class="label">Collector Officer</td><td class="value">${user.name} (${user.id})</td></tr>
           <tr><td class="label">Date & Time</td><td class="value">${new Date(collection.timestamp || Date.now()).toLocaleString()}</td></tr>
           <tr><td class="label">Location / GPS</td><td class="value">${collection.location || 'Field Point'}</td></tr>
-          ${collection.notes ? `<tr><td class="label">Field Notes</td><td class="value">${collection.notes}</td></tr>` : ''}
+          ${noteText ? `<tr><td class="label">Field Notes / Summary</td><td class="value" style="color: #0891b2; font-weight: bold;">${noteText}</td></tr>` : ''}
         </table>
 
         <div style="text-align: center; margin-top: 20px; padding-top: 10px; border-top: 1px dashed #cbd5e1;">

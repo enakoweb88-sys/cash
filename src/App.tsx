@@ -41,33 +41,43 @@ export default function App() {
   const [currentView, setCurrentView] = useState<ViewType>('dashboard');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
+  // Auto-clear data on first load if requested to start completely clean
+  useEffect(() => {
+    const isCleared = localStorage.getItem('enako_cash_data_cleared_v1');
+    if (!isCleared) {
+      localStorage.removeItem('enako_collections');
+      localStorage.removeItem('enako_clients');
+      localStorage.removeItem('enako_drafts');
+      localStorage.removeItem('enako_cash_collections');
+      localStorage.removeItem('cash_collections');
+      localStorage.removeItem('afriland_collections');
+      localStorage.removeItem('afriland_clients');
+      localStorage.removeItem('afriland_drafts');
+      localStorage.setItem('enako_cash_data_cleared_v1', 'true');
+    }
+  }, []);
+
   // Clients State
   const [clients, setClients] = useState<Client[]>(() => {
+    const cleared = localStorage.getItem('enako_cash_data_cleared_v1');
+    if (!cleared) return [];
     const saved = localStorage.getItem('enako_clients');
-    if (saved && (saved.includes('C-9821') || saved.includes('Alpha Boutiques') || saved.includes('Jean-Luc'))) {
-      localStorage.removeItem('enako_clients');
-      return [];
-    }
     return saved ? JSON.parse(saved) : [];
   });
 
   // Collections (Settled / Server synced)
   const [collections, setCollections] = useState<Collection[]>(() => {
+    const cleared = localStorage.getItem('enako_cash_data_cleared_v1');
+    if (!cleared) return [];
     const saved = localStorage.getItem('enako_collections');
-    if (saved && (saved.includes('COL-8923') || saved.includes('Marché Central'))) {
-      localStorage.removeItem('enako_collections');
-      return [];
-    }
     return saved ? JSON.parse(saved) : [];
   });
 
   // Offline Drafts
   const [drafts, setDrafts] = useState<Collection[]>(() => {
+    const cleared = localStorage.getItem('enako_cash_data_cleared_v1');
+    if (!cleared) return [];
     const saved = localStorage.getItem('enako_drafts');
-    if (saved && (saved.includes('C-9001') || saved.includes('Kamer Logistics'))) {
-      localStorage.removeItem('enako_drafts');
-      return [];
-    }
     return saved ? JSON.parse(saved) : [];
   });
 

@@ -42,7 +42,6 @@ export const StatusUpdateModal: React.FC<StatusUpdateModalProps> = ({
       const extraNum = Math.max(0, Number(cleanCommas(extraAmount)) || 0);
 
       onSaveStatus(
-      onSaveStatus(
         collection.id,
         status,
         shortageNum,
