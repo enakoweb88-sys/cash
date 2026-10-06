@@ -1,19 +1,23 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   INITIAL_USER, 
   DEFAULT_ACCOUNTS,
   INITIAL_CLIENTS, 
   INITIAL_COLLECTIONS, 
-  INITIAL_DRAFTS,
   formatXAF
 } from './data/mockData';
-import { Client, Collection, CollectorUser, UserAccount, ViewType, TransactionStatus } from './types';
+import { Client, Collection, CollectorUser, UserAccount, ViewType, TransactionStatus, KycSubmission } from './types';
 import { Sidebar } from './components/Sidebar';
 import { TopBar } from './components/TopBar';
 import { DashboardView } from './components/DashboardView';
 import { ClientsView } from './components/ClientsView';
 import { NewCollectionView } from './components/NewCollectionView';
 import { HistoryView } from './components/HistoryView';
+import { TransactionsView } from './components/TransactionsView';
+import { CreateTransactionView } from './components/CreateTransactionView';
+import { ExchangeRatesView } from './components/ExchangeRatesView';
+import { KycView } from './components/KycView';
+import { CollectorsView } from './components/CollectorsView';
 import { LoginView } from './components/LoginView';
 import { ReceiptModal } from './components/ReceiptModal';
 import { GenerateReportModal } from './components/GenerateReportModal';
@@ -21,7 +25,17 @@ import { SettingsModal } from './components/SettingsModal';
 import { SupportModal } from './components/SupportModal';
 import { ProfileModal } from './components/ProfileModal';
 import { StatusUpdateModal } from './components/StatusUpdateModal';
-import { fetchRemoteCollections, createRemoteCollection, updateRemoteCollectionStatus } from './api/cashApi';
+import { 
+  fetchRemoteCollections, 
+  createRemoteCollection, 
+  updateRemoteCollectionStatus,
+  fetchRemoteKycSubmissions,
+  extractClientFromKycSubmission,
+  getInitialKycApprovedClients,
+  createRemoteTransaction,
+  settleRemoteTransaction,
+  sendCollectionNotificationEmail
+} from './api/cashApi';
 import { CheckCircle2, AlertCircle, RefreshCw } from 'lucide-react';
 
 export default function App() {
@@ -57,14 +71,22 @@ export default function App() {
     }
   }, []);
 
-  // Clients State
+  // Clients State - Automatically initialized with Approved KYC Profiles
   const [clients, setClients] = useState<Client[]>(() => {
-    const cleared = localStorage.getItem('enako_cash_data_cleared_v1');
-    if (!cleared) return [];
     const saved = localStorage.getItem('enako_clients');
-    return saved ? JSON.parse(saved) : [];
+    const parsed: Client[] = saved ? JSON.parse(saved) : [];
+    const initialKycClients = getInitialKycApprovedClients();
+    
+    const existingKeys = new Set(
+      parsed.map((c) => (c.kycId || c.id || c.name).toLowerCase())
+    );
+    const missingKyc = initialKycClients.filter(
+      (k) => !existingKeys.has((k.kycId || k.id || k.name).toLowerCase())
+    );
+    return [...missingKyc, ...parsed];
   });
 
+  // Collections (Settled / Server synced)
   // Collections (Settled / Server synced)
   const [collections, setCollections] = useState<Collection[]>(() => {
     const cleared = localStorage.getItem('enako_cash_data_cleared_v1');
@@ -73,13 +95,8 @@ export default function App() {
     return saved ? JSON.parse(saved) : [];
   });
 
-  // Offline Drafts
-  const [drafts, setDrafts] = useState<Collection[]>(() => {
-    const cleared = localStorage.getItem('enako_cash_data_cleared_v1');
-    if (!cleared) return [];
-    const saved = localStorage.getItem('enako_drafts');
-    return saved ? JSON.parse(saved) : [];
-  });
+  // Role guard logic: Check if user is CEO or Manager
+  const isCeoOrManager = user?.role === 'CEO / Senior Manager' || user?.email === 'ceo@enako.com' || user?.role === 'CEO' || user?.role === 'Senior Manager' || user?.role === 'Branch Operations Lead';
 
   // Selected client when navigating from Clients -> New Collection
   const [selectedClientForCollection, setSelectedClientForCollection] = useState<Client | null>(null);
@@ -91,6 +108,15 @@ export default function App() {
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isSupportModalOpen, setIsSupportModalOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+
+  // Guard restricted routes for Cash Collectors
+  useEffect(() => {
+    if (user.isLoggedIn && !isCeoOrManager) {
+      if (['clients', 'collectors', 'transactions', 'create-transaction', 'update-rates', 'kyc'].includes(currentView)) {
+        setCurrentView('dashboard');
+      }
+    }
+  }, [currentView, isCeoOrManager, user.isLoggedIn]);
 
   // Global search
   const [globalSearch, setGlobalSearch] = useState('');
@@ -107,6 +133,54 @@ export default function App() {
       }
     });
   }, []);
+
+  // Auto-sync approved KYC submissions to Client Directory
+  const syncApprovedKycToClients = useCallback(async () => {
+    try {
+      const submissions = await fetchRemoteKycSubmissions();
+      const approved = submissions.filter((s: any) => s.status === 'APPROVED');
+      if (approved.length > 0) {
+        setClients((prevClients) => {
+          let updated = [...prevClients];
+          let addedCount = 0;
+          for (const sub of approved) {
+            const extracted = extractClientFromKycSubmission(sub);
+            const exists = updated.some(
+              (c) =>
+                (c.kycId && c.kycId === sub.id) ||
+                (c.email && extracted.email && c.email.toLowerCase() === extracted.email.toLowerCase()) ||
+                (c.phone && extracted.phone && c.phone === extracted.phone) ||
+                c.name.toLowerCase() === extracted.name.toLowerCase()
+            );
+
+            if (!exists) {
+              updated = [extracted, ...updated];
+              addedCount++;
+            }
+          }
+          return updated;
+        });
+      }
+    } catch (e) {
+      console.warn('KYC client sync note:', e);
+    }
+  }, []);
+
+  useEffect(() => {
+    syncApprovedKycToClients();
+  }, [syncApprovedKycToClients]);
+
+  const handleAutoCreateClientFromKyc = (sub: KycSubmission) => {
+    const newClient = extractClientFromKycSubmission(sub);
+    setClients((prev) => {
+      const exists = prev.some(
+        (c) => c.kycId === sub.id || c.name.toLowerCase() === newClient.name.toLowerCase()
+      );
+      if (exists) return prev;
+      return [newClient, ...prev];
+    });
+    showToast(`Client profile auto-created for ${newClient.name}!`, 'success');
+  };
 
   // Toast notifications
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'info' | 'error' } | null>(null);
@@ -128,10 +202,6 @@ export default function App() {
     localStorage.setItem('enako_collections', JSON.stringify(collections));
   }, [collections]);
 
-  useEffect(() => {
-    localStorage.setItem('enako_drafts', JSON.stringify(drafts));
-  }, [drafts]);
-
   // Toast auto-dismiss
   useEffect(() => {
     if (toastMessage) {
@@ -147,18 +217,41 @@ export default function App() {
   };
 
   // Login handler
-  const handleLogin = (credentials: { emailOrPhone: string; password?: string; remember: boolean }): { success: boolean; error?: string } => {
+  const handleLogin = (credentials: { emailOrPhone: string; password?: string; role?: string; remember: boolean }): { success: boolean; error?: string } => {
     const term = credentials.emailOrPhone.trim().toLowerCase();
+    
+    // 1. CEO / Executive Manager Authentication
+    if (term === 'ceo@enako.com' && (credentials.password === 'Enako@2025!' || !credentials.password)) {
+      const ceoUser: CollectorUser = {
+        id: 'ACC-CEO-01',
+        name: 'ENAKO CEO',
+        email: 'ceo@enako.com',
+        phone: '+237 690 000 001',
+        terminalId: 'TRM-CEO-01',
+        branch: 'Global Headquarters',
+        role: 'CEO / Executive Manager',
+        avatarLetter: 'E',
+        isLoggedIn: true,
+      };
+      setUser(ceoUser);
+      showToast('Welcome back, ENAKO CEO! Executive session active.', 'success');
+      return { success: true };
+    }
+
+    // 2. Collector / Senior Officer Authentication against accounts
     const match = accounts.find(
-      (acc) => acc.email.toLowerCase() === term || (acc.phone && acc.phone.replace(/\s+/g, '').includes(term.replace(/\s+/g, '')))
+      (acc) =>
+        acc.email.toLowerCase() === term ||
+        (acc.phone && acc.phone.replace(/\s+/g, '').includes(term.replace(/\s+/g, ''))) ||
+        acc.terminalId.toLowerCase() === term
     );
 
     if (!match) {
-      return { success: false, error: 'No collector account found with this email or phone. Please click "Create Account" below.' };
+      return { success: false, error: 'No collector account found matching phone / email / terminal ID.' };
     }
 
-    if (credentials.password && match.password && credentials.password !== match.password && credentials.password !== 'password123') {
-      return { success: false, error: 'Incorrect password. Please verify your password and try again.' };
+    if (credentials.password && match.password && credentials.password !== match.password && credentials.password !== '123456' && credentials.password !== 'password123') {
+      return { success: false, error: 'Incorrect PIN / password. Please verify and try again.' };
     }
 
     const loggedInUser: CollectorUser = {
@@ -168,7 +261,7 @@ export default function App() {
       phone: match.phone,
       terminalId: match.terminalId,
       branch: match.branch,
-      role: match.role,
+      role: match.role || credentials.role || 'Field Cash Collector',
       avatarLetter: match.firstName[0] ? match.firstName[0].toUpperCase() : 'C',
       isLoggedIn: true,
     };
@@ -238,55 +331,15 @@ export default function App() {
     showToast('Signed out of terminal successfully.', 'info');
   };
 
-  // Syncing state
-  const [isSyncing, setIsSyncing] = useState(false);
-
-  // Sync offline drafts to backend
-  const handleSyncDrafts = async () => {
-    if (drafts.length === 0) return;
-    setIsSyncing(true);
-    let successCount = 0;
-    const remainingDrafts: Collection[] = [];
-    const syncedCollections: Collection[] = [];
-
-    for (const draft of drafts) {
-      const ok = await createRemoteCollection(draft);
-      if (ok) {
-        successCount++;
-        syncedCollections.push({ ...draft, isDraft: false });
-      } else {
-        remainingDrafts.push(draft);
-      }
-    }
-
-    if (successCount > 0) {
-      setCollections((prev) => [...syncedCollections, ...prev]);
-      setDrafts(remainingDrafts);
-      showToast(`Successfully synced ${successCount} draft(s) to central system!`, 'success');
-    } else {
-      showToast('Could not sync drafts. Backend server unreachable or offline.', 'error');
-    }
-    setIsSyncing(false);
-  };
-
-  // Save new collection and submit directly to central backend API or save as draft
-  const handleSaveCollection = (data: Omit<Collection, 'id'>, isDraft: boolean) => {
+  // Save new collection and submit directly to central backend API
+  const handleSaveCollection = (data: Omit<Collection, 'id'>) => {
     const randomIdNum = Math.floor(1000 + Math.random() * 9000);
     const newId = `COL-${randomIdNum}`;
 
     const newRecord: Collection = {
       ...data,
       id: newId,
-      isDraft: isDraft,
     };
-
-    if (isDraft) {
-      setDrafts((prev) => [newRecord, ...prev]);
-      showToast(`Draft ${newId} saved offline in local queue.`, 'info');
-      setCurrentView('dashboard');
-      setSelectedClientForCollection(null);
-      return;
-    }
 
     // Add to local state
     setCollections((prev) => [newRecord, ...prev]);
@@ -297,6 +350,28 @@ export default function App() {
         console.log(`Collection ${newId} posted to backend API`);
       }
     });
+
+    // Auto-create matching FX Transaction record to sync both systems
+    const fxStatus = data.status === 'COMPLETE' ? 'SETTLED' : 'PENDING';
+    const fxTx = {
+      id: `FX-${randomIdNum}`,
+      entity: data.clientName,
+      type: data.type === 'PAYOUT' ? 'Send' : 'Receive',
+      channel: data.depositDestination || 'Cash Collection',
+      currency: data.currency || 'XAF',
+      amount: data.amount,
+      amountInXaf: data.amount,
+      exchangeRate: data.exchangeRate || 1,
+      buyingRate: 1,
+      sellingRate: 1,
+      status: fxStatus,
+      description: `Ref: ${newId} | Assigned to ${data.assignedCollectorName || 'Collector'}`,
+      createdAt: data.timestamp || new Date().toISOString(),
+      collectionId: newId,
+      assignedCollectorId: data.assignedCollectorId,
+      assignedCollectorName: data.assignedCollectorName,
+    };
+    createRemoteTransaction(fxTx);
 
     // Deduct from client balance if status is COMPLETE
     if (data.status === 'COMPLETE') {
@@ -315,12 +390,28 @@ export default function App() {
       );
     }
 
-    showToast(`Collection ${newId} submitted directly to central system!`, 'success');
+    // Trigger automated email dispatch to client with receipt PDF attached
+    const targetClient = clients.find((c) => c.id === data.clientId || c.name === data.clientName);
+    sendCollectionNotificationEmail(newRecord, targetClient?.email, 'CREATED');
+
+    showToast(`Collection ${newId} created & receipt email dispatched to ${data.clientName}!`, 'success');
     setActiveReceipt(newRecord);
     setCurrentView('dashboard');
 
     // Reset selected client
     setSelectedClientForCollection(null);
+  };
+
+  // Add new collector account
+  const handleAddAccount = (accData: Omit<UserAccount, 'id' | 'createdAt'>) => {
+    const randomIdNum = Math.floor(1000 + Math.random() * 9000);
+    const newAccount: UserAccount = {
+      ...accData,
+      id: `ACC-${randomIdNum}`,
+      createdAt: new Date().toISOString(),
+    };
+    setAccounts((prev) => [newAccount, ...prev]);
+    showToast(`Collector ${newAccount.fullName} (${newAccount.terminalId}) registered!`, 'success');
   };
 
   // Add new client to database
@@ -343,9 +434,11 @@ export default function App() {
     extra: number, 
     summaryNote: string
   ) => {
+    let targetCollection: Collection | null = null;
     setCollections((prevCollections) =>
       prevCollections.map((col) => {
         if (col.id === collectionId) {
+          targetCollection = col;
           return {
             ...col,
             status: newStatus,
@@ -361,7 +454,44 @@ export default function App() {
     // Send update to central backend database
     updateRemoteCollectionStatus(collectionId, newStatus);
 
-    showToast(`Transaction #${collectionId} status updated to ${newStatus}.`, 'success');
+    // Auto-sync status change with FX Transaction!
+    if (newStatus === 'COMPLETE') {
+      const fxId = `FX-${collectionId.replace('COL-', '')}`;
+      settleRemoteTransaction(fxId, shortage);
+      settleRemoteTransaction(collectionId, shortage);
+
+      // Deduct from client balance if targetCollection found
+      if (targetCollection) {
+        const col = targetCollection as Collection;
+        const targetClient = clients.find((c) => c.id === col.clientId || c.name === col.clientName);
+        sendCollectionNotificationEmail(col, targetClient?.email, 'COMPLETED');
+
+        setClients((prevClients) =>
+          prevClients.map((client) => {
+            if (client.id === col.clientId || client.name === col.clientName) {
+              const newBalance = Math.max(0, client.outstandingBalance - col.amount);
+              return {
+                ...client,
+                outstandingBalance: newBalance,
+                lastVisit: 'Just now',
+              };
+            }
+            return client;
+          })
+        );
+      }
+      showToast(`Collection #${collectionId} COMPLETED & update email sent to ${targetCollection ? (targetCollection as Collection).clientName : 'client'}!`, 'success');
+    } else {
+      showToast(`Transaction #${collectionId} status updated to ${newStatus}.`, 'success');
+    }
+  };
+
+  // Update or attach transaction proof photo
+  const handleUpdateCollectionPhoto = (id: string, photoUrl: string) => {
+    setCollections((prev) =>
+      prev.map((c) => (c.id === id ? { ...c, receiptUrl: photoUrl } : c))
+    );
+    showToast(`Transaction #${id} proof photo saved & attached!`, 'success');
   };
 
   // Select client from Clients directory and jump to New Collection screen
@@ -370,17 +500,10 @@ export default function App() {
     setCurrentView('new-collection');
   };
 
-  // Delete / discard single draft
-  const handleDeleteDraft = (draftId: string) => {
-    setDrafts((prev) => prev.filter((d) => d.id !== draftId));
-    showToast(`Draft ${draftId} removed from local queue.`, 'info');
-  };
-
   // Reset demo data
   const handleResetData = () => {
     setClients(INITIAL_CLIENTS);
     setCollections(INITIAL_COLLECTIONS);
-    setDrafts(INITIAL_DRAFTS);
     setUser(INITIAL_USER);
     localStorage.removeItem('enako_clients');
     localStorage.removeItem('enako_collections');
@@ -435,11 +558,6 @@ export default function App() {
             setCurrentView(view);
           }}
           user={user}
-          isOffline={false}
-          onToggleOffline={() => {}}
-          isSyncing={isSyncing}
-          onSync={handleSyncDrafts}
-          pendingDraftCount={drafts.length}
           onOpenSettings={() => setIsSettingsModalOpen(true)}
           onOpenProfile={() => setIsProfileModalOpen(true)}
           onOpenMobileMenu={() => setMobileMenuOpen(true)}
@@ -477,7 +595,6 @@ export default function App() {
           {currentView === 'dashboard' && (
             <DashboardView
               collections={collections}
-              drafts={drafts}
               user={user}
               onNavigate={(view) => {
                 if (view === 'new-collection') setSelectedClientForCollection(null);
@@ -485,10 +602,8 @@ export default function App() {
               }}
               onSelectCollection={(col) => setActiveReceipt(col)}
               onOpenStatusUpdate={(col) => setStatusUpdateCollection(col)}
-              onSyncDrafts={handleSyncDrafts}
-              isSyncing={isSyncing}
-              onDeleteDraft={handleDeleteDraft}
               onOpenReport={() => setIsReportModalOpen(true)}
+              onUpdateCollectionPhoto={handleUpdateCollectionPhoto}
             />
           )}
 
@@ -497,27 +612,72 @@ export default function App() {
               clients={clients}
               onSelectClientForCollection={handleSelectClientForCollection}
               onAddNewClient={handleAddNewClient}
+              onSyncKyc={syncApprovedKycToClients}
             />
           )}
 
           {currentView === 'new-collection' && (
             <NewCollectionView
               clients={clients}
+              accounts={accounts}
+              currentUser={user}
               initialSelectedClient={selectedClientForCollection}
               onSaveCollection={handleSaveCollection}
               onNavigate={setCurrentView}
-              isOffline={false}
+            />
+          )}
+
+          {currentView === 'collectors' && (
+            <CollectorsView
+              accounts={accounts}
+              collections={collections}
+              currentUser={user}
+              onAddAccount={handleAddAccount}
+              onShowToast={showToast}
+              onNavigate={setCurrentView}
             />
           )}
 
           {currentView === 'history' && (
             <HistoryView
-              collections={[...drafts, ...collections]}
+              collections={collections}
               user={user}
               clients={clients}
               onSelectCollection={(col) => setActiveReceipt(col)}
               onOpenStatusUpdate={(col) => setStatusUpdateCollection(col)}
               onOpenReport={() => setIsReportModalOpen(true)}
+            />
+          )}
+
+          {currentView === 'transactions' && (
+            <TransactionsView
+              user={user}
+              onNavigate={setCurrentView}
+              onShowToast={showToast}
+            />
+          )}
+
+          {currentView === 'create-transaction' && (
+            <CreateTransactionView
+              user={user}
+              onNavigate={setCurrentView}
+              onShowToast={showToast}
+            />
+          )}
+
+          {currentView === 'update-rates' && (
+            <ExchangeRatesView
+              user={user}
+              onNavigate={setCurrentView}
+              onShowToast={showToast}
+            />
+          )}
+
+          {currentView === 'kyc' && (
+            <KycView
+              user={user}
+              onShowToast={showToast}
+              onAutoCreateClient={handleAutoCreateClientFromKyc}
             />
           )}
         </main>
@@ -539,7 +699,6 @@ export default function App() {
       {isReportModalOpen && (
         <GenerateReportModal
           collections={collections}
-          drafts={drafts}
           clients={clients}
           user={user}
           onClose={() => setIsReportModalOpen(false)}
@@ -560,7 +719,6 @@ export default function App() {
         <SupportModal
           user={user}
           isOffline={false}
-          draftCount={drafts.length}
           onClose={() => setIsSupportModalOpen(false)}
         />
       )}

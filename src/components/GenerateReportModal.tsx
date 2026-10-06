@@ -32,7 +32,7 @@ import {
 
 interface GenerateReportModalProps {
   collections: Collection[];
-  drafts: Collection[];
+  drafts?: Collection[];
   user: CollectorUser;
   clients?: Client[];
   onClose: () => void;
@@ -40,7 +40,7 @@ interface GenerateReportModalProps {
 
 export const GenerateReportModal: React.FC<GenerateReportModalProps> = ({
   collections,
-  drafts,
+  drafts = [],
   user,
   clients = [],
   onClose,
@@ -50,10 +50,22 @@ export const GenerateReportModal: React.FC<GenerateReportModalProps> = ({
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [isExporting, setIsExporting] = useState<string | null>(null);
 
+  // Filter collections by role if field collector
+  const userCollections = useMemo(() => {
+    const isCeoOrManager = user?.role === 'CEO / Senior Manager' || user?.email === 'ceo@enako.com' || user?.role === 'CEO' || user?.role === 'Senior Manager' || user?.role === 'Branch Operations Lead';
+    if (isCeoOrManager) return collections;
+    const firstName = user?.name ? user.name.trim().split(' ')[0] : '';
+    return collections.filter((c) => 
+      c.assignedCollectorId === user?.terminalId ||
+      c.assignedCollectorId === user?.id ||
+      (firstName && c.assignedCollectorName && c.assignedCollectorName.toLowerCase().includes(firstName.toLowerCase()))
+    );
+  }, [collections, user]);
+
   // Filter collections and calculate metrics based on chosen timeframe
   const { filtered, periodLabel, start, end } = useMemo(() => {
-    return filterCollectionsByPeriod(collections, selectedPeriod);
-  }, [collections, selectedPeriod]);
+    return filterCollectionsByPeriod(userCollections, selectedPeriod);
+  }, [userCollections, selectedPeriod]);
 
   const metrics = useMemo(() => {
     return calculateReportMetrics(filtered, drafts, clients, periodLabel, start, end);
@@ -97,7 +109,7 @@ export const GenerateReportModal: React.FC<GenerateReportModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/65 backdrop-blur-xs">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/65 backdrop-blur-xs font-sans">
       <div className="bg-[#ffffff] border border-[#e5e5e5] w-full max-w-4xl shadow-2xl flex flex-col max-h-[92vh] overflow-hidden">
         {/* Header */}
         <div className="p-4 bg-[#2f3131] text-white flex justify-between items-center shrink-0">
@@ -108,13 +120,13 @@ export const GenerateReportModal: React.FC<GenerateReportModalProps> = ({
                 E-NAKO Executive Collection & Reconciliation Report
               </span>
               <span className="text-[10px] text-[#c8c6c5] font-mono">
-                Terminal {user.terminalId} • {user.name} ({user.branch})
+                {user.name} ({user.branch}) • Terminal: {user.terminalId}
               </span>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="text-[#c8c6c5] hover:text-white p-1 transition-colors"
+            className="text-[#c8c6c5] hover:text-white p-1 transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -148,7 +160,7 @@ export const GenerateReportModal: React.FC<GenerateReportModalProps> = ({
               <button
                 type="button"
                 onClick={() => setSelectedPeriod('daily')}
-                className={`px-3 py-1.5 font-bold uppercase transition-colors ${
+                className={`px-3 py-1.5 font-bold uppercase transition-colors cursor-pointer ${
                   selectedPeriod === 'daily'
                     ? 'bg-[#0891b2] text-white shadow-xs'
                     : 'text-[#5f5e5e] hover:text-[#1a1c1c] hover:bg-[#f9f9f9]'
@@ -160,7 +172,7 @@ export const GenerateReportModal: React.FC<GenerateReportModalProps> = ({
               <button
                 type="button"
                 onClick={() => setSelectedPeriod('weekly')}
-                className={`px-3 py-1.5 font-bold uppercase transition-colors ${
+                className={`px-3 py-1.5 font-bold uppercase transition-colors cursor-pointer ${
                   selectedPeriod === 'weekly'
                     ? 'bg-[#0891b2] text-white shadow-xs'
                     : 'text-[#5f5e5e] hover:text-[#1a1c1c] hover:bg-[#f9f9f9]'
@@ -172,7 +184,7 @@ export const GenerateReportModal: React.FC<GenerateReportModalProps> = ({
               <button
                 type="button"
                 onClick={() => setSelectedPeriod('monthly')}
-                className={`px-3 py-1.5 font-bold uppercase transition-colors ${
+                className={`px-3 py-1.5 font-bold uppercase transition-colors cursor-pointer ${
                   selectedPeriod === 'monthly'
                     ? 'bg-[#0891b2] text-white shadow-xs'
                     : 'text-[#5f5e5e] hover:text-[#1a1c1c] hover:bg-[#f9f9f9]'
@@ -184,7 +196,7 @@ export const GenerateReportModal: React.FC<GenerateReportModalProps> = ({
               <button
                 type="button"
                 onClick={() => setSelectedPeriod('all')}
-                className={`px-3 py-1.5 font-bold uppercase transition-colors ${
+                className={`px-3 py-1.5 font-bold uppercase transition-colors cursor-pointer ${
                   selectedPeriod === 'all'
                     ? 'bg-[#0891b2] text-white shadow-xs'
                     : 'text-[#5f5e5e] hover:text-[#1a1c1c] hover:bg-[#f9f9f9]'
@@ -206,10 +218,10 @@ export const GenerateReportModal: React.FC<GenerateReportModalProps> = ({
           <div className="border-b-2 border-[#0891b2] pb-4 flex flex-col md:flex-row justify-between items-start md:items-end gap-3">
             <div>
               <h2 className="text-2xl font-bold text-[#0891b2] uppercase tracking-tight font-sans">
-                E-NAKO
+                E-NAKO CASH SYSTEM
               </h2>
               <p className="text-xs font-bold text-[#1a1c1c] uppercase mt-0.5">
-                Cash Management & Agency Collection Division
+                Cash Management & Field Collection Performance Audit
               </p>
               <p className="text-xs text-[#5f5e5e] mt-1 font-mono">
                 {metrics.periodLabel}
@@ -218,8 +230,8 @@ export const GenerateReportModal: React.FC<GenerateReportModalProps> = ({
 
             <div className="text-left md:text-right font-mono text-xs text-[#5f5e5e] space-y-0.5">
               <div>Period: <strong className="text-[#1a1c1c]">{metrics.startDateStr} — {metrics.endDateStr}</strong></div>
-              <div>Terminal: <strong className="text-[#1a1c1c]">{user.terminalId}</strong></div>
-              <div>Collector: <strong className="text-[#1a1c1c]">{user.name} ({user.id})</strong></div>
+              <div>Collector: <strong className="text-[#1a1c1c]">{user.name}</strong></div>
+              <div>Branch: <strong className="text-[#1a1c1c]">{user.branch}</strong></div>
             </div>
           </div>
 
@@ -228,7 +240,7 @@ export const GenerateReportModal: React.FC<GenerateReportModalProps> = ({
             <div className="flex items-center gap-2 mb-2">
               <Sparkles className="w-4 h-4 text-[#0891b2]" />
               <h3 className="text-xs font-bold uppercase tracking-wider text-[#0e7490]">
-                Management Executive Summary & Calculations for Leadership
+                Management Executive Summary & Calculations
               </h3>
             </div>
             <p className="text-xs leading-relaxed text-[#1a1c1c] font-sans font-medium">
@@ -238,25 +250,43 @@ export const GenerateReportModal: React.FC<GenerateReportModalProps> = ({
 
           {/* Key Metrics Grid */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 md:gap-4">
-            <div className="p-4 bg-[#f9f9f9] border border-[#e5e5e5] space-y-1">
+            {/* Total Cash Collected (Settled) */}
+            <div className="p-4 bg-[#f9f9f9] border border-[#e5e5e5] border-l-4 border-l-[#0891b2] space-y-1">
               <div className="flex items-center justify-between">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-[#5f5e5e]">
-                  Total Cash Settled
+                  Total Cash Collected
                 </span>
                 <DollarSign className="w-3.5 h-3.5 text-[#0891b2]" />
               </div>
               <div className="font-mono text-xl md:text-2xl font-black text-[#0891b2] tabular-nums">
-                {formatXAF(metrics.totalCollected)} <span className="text-xs font-sans font-normal text-[#5f5e5e]">XAF</span>
+                {formatXAF(metrics.totalCollected)} <span className="text-xs font-sans font-normal text-[#5f5e5e]">FCFA</span>
               </div>
-              <div className="text-[10px] text-[#5f5e5e] font-mono">
-                {metrics.completedCount} successful settlements
+              <div className="text-[10px] text-[#166534] font-semibold">
+                {metrics.completedCount} settled collections
               </div>
             </div>
 
+            {/* Total Pending Collections */}
+            <div className="p-4 bg-[#f9f9f9] border border-[#e5e5e5] border-l-4 border-l-[#ca8a04] space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-[#5f5e5e]">
+                  Pending Collections
+                </span>
+                <Clock className="w-3.5 h-3.5 text-[#ca8a04]" />
+              </div>
+              <div className="font-mono text-xl md:text-2xl font-black text-[#ca8a04] tabular-nums">
+                {formatXAF(metrics.totalPending)} <span className="text-xs font-sans font-normal text-[#5f5e5e]">FCFA</span>
+              </div>
+              <div className="text-[10px] text-[#ca8a04] font-semibold">
+                {metrics.pendingCount} collections awaiting clearing
+              </div>
+            </div>
+
+            {/* Success Rate */}
             <div className="p-4 bg-[#f9f9f9] border border-[#e5e5e5] space-y-1">
               <div className="flex items-center justify-between">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-[#5f5e5e]">
-                  Success Rate
+                  Recovery Success Rate
                 </span>
                 <TrendingUp className="w-3.5 h-3.5 text-[#0891b2]" />
               </div>
@@ -264,10 +294,11 @@ export const GenerateReportModal: React.FC<GenerateReportModalProps> = ({
                 {metrics.successRate.toFixed(1)}%
               </div>
               <div className="text-[10px] text-[#5f5e5e] font-mono">
-                {metrics.completedCount} of {metrics.totalAttempted} attempts
+                {metrics.completedCount} of {metrics.totalAttempted} tasks
               </div>
             </div>
 
+            {/* Avg Ticket Size */}
             <div className="p-4 bg-[#f9f9f9] border border-[#e5e5e5] space-y-1">
               <div className="flex items-center justify-between">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-[#5f5e5e]">
@@ -276,25 +307,10 @@ export const GenerateReportModal: React.FC<GenerateReportModalProps> = ({
                 <Layers className="w-3.5 h-3.5 text-[#0891b2]" />
               </div>
               <div className="font-mono text-xl md:text-2xl font-black text-[#1a1c1c] tabular-nums">
-                {formatXAF(Math.round(metrics.avgTicketSize))} <span className="text-xs font-sans font-normal text-[#5f5e5e]">XAF</span>
+                {formatXAF(Math.round(metrics.avgTicketSize))} <span className="text-xs font-sans font-normal text-[#5f5e5e]">FCFA</span>
               </div>
               <div className="text-[10px] text-[#5f5e5e] font-mono">
-                Per successful client visit
-              </div>
-            </div>
-
-            <div className="p-4 bg-[#f9f9f9] border border-[#e5e5e5] space-y-1">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-[#5f5e5e]">
-                  Top Single Client
-                </span>
-                <Award className="w-3.5 h-3.5 text-[#0891b2]" />
-              </div>
-              <div className="font-sans text-sm font-bold text-[#1a1c1c] truncate">
-                {metrics.topClient ? metrics.topClient.name : 'None'}
-              </div>
-              <div className="font-mono text-xs font-bold text-[#0891b2]">
-                {metrics.topClient ? `${formatXAF(metrics.topClient.amount)} XAF` : '-'}
+                Average per completed client visit
               </div>
             </div>
           </div>
@@ -305,7 +321,7 @@ export const GenerateReportModal: React.FC<GenerateReportModalProps> = ({
               <div className="flex justify-between items-center">
                 <h4 className="text-xs font-bold uppercase tracking-wider text-[#1a1c1c] flex items-center gap-1.5">
                   <MapPin className="w-3.5 h-3.5 text-[#0891b2]" />
-                  <span>Regional & Sector Cash Breakdown</span>
+                  <span>Regional Cash Distribution Breakdown</span>
                 </h4>
                 <span className="text-[11px] font-mono text-[#5f5e5e]">
                   Sorted by Volume
@@ -320,7 +336,7 @@ export const GenerateReportModal: React.FC<GenerateReportModalProps> = ({
                       <span className="text-[#0891b2] font-mono">{sec.percentage}%</span>
                     </div>
                     <div className="font-mono font-bold text-sm text-[#1a1c1c] mb-1">
-                      {formatXAF(sec.amount)} XAF
+                      {formatXAF(sec.amount)} FCFA
                     </div>
                     <div className="w-full bg-[#e5e5e5] h-1.5 rounded-full overflow-hidden">
                       <div
@@ -329,7 +345,7 @@ export const GenerateReportModal: React.FC<GenerateReportModalProps> = ({
                       />
                     </div>
                     <div className="text-[10px] text-[#5f5e5e] mt-1.5 font-mono">
-                      {sec.count} visit{sec.count > 1 ? 's' : ''}
+                      {sec.count} collection{sec.count > 1 ? 's' : ''}
                     </div>
                   </div>
                 ))}
@@ -349,13 +365,14 @@ export const GenerateReportModal: React.FC<GenerateReportModalProps> = ({
             </div>
 
             <div className="border border-[#e5e5e5] overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse font-mono">
+              <table className="w-full text-left text-xs border-collapse">
                 <thead>
-                  <tr className="bg-[#f3f3f3] border-b border-[#e5e5e5] text-[#5f5e5e] uppercase">
+                  <tr className="bg-[#f3f3f3] border-b border-[#e5e5e5] text-[#5f5e5e] uppercase text-[11px]">
                     <th className="p-2.5">Ref</th>
-                    <th className="p-2.5">Client ID</th>
                     <th className="p-2.5">Client Name</th>
-                    <th className="p-2.5">Amount (XAF)</th>
+                    <th className="p-2.5">Collector</th>
+                    <th className="p-2.5">Amount (FCFA)</th>
+                    <th className="p-2.5">Location</th>
                     <th className="p-2.5">Date & Time</th>
                     <th className="p-2.5 text-right">Status</th>
                   </tr>
@@ -363,18 +380,19 @@ export const GenerateReportModal: React.FC<GenerateReportModalProps> = ({
                 <tbody className="divide-y divide-[#e5e5e5]">
                   {filtered.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="p-8 text-center text-[#5f5e5e] font-sans">
+                      <td colSpan={7} className="p-8 text-center text-[#5f5e5e] font-sans">
                         No transactions recorded for this selected timeframe.
                       </td>
                     </tr>
                   ) : (
                     filtered.map((col) => (
                       <tr key={col.id} className="hover:bg-[#f9f9f9]">
-                        <td className="p-2.5 font-bold text-[#0891b2]">{col.id}</td>
-                        <td className="p-2.5 text-[#5f5e5e]">{col.clientId}</td>
-                        <td className="p-2.5 font-sans font-medium text-[#1a1c1c]">{col.clientName}</td>
-                        <td className="p-2.5 font-bold text-[#1a1c1c]">{formatXAF(col.amount)}</td>
-                        <td className="p-2.5 text-[#5f5e5e]">
+                        <td className="p-2.5 font-bold font-mono text-[#0891b2]">{col.id}</td>
+                        <td className="p-2.5 font-bold text-[#1a1c1c]">{col.clientName}</td>
+                        <td className="p-2.5 text-[#5f5e5e]">{col.assignedCollectorName || user.name || 'Collector'}</td>
+                        <td className="p-2.5 font-mono font-bold text-[#1a1c1c]">{formatXAF(col.amount)} FCFA</td>
+                        <td className="p-2.5 text-[#5f5e5e]">{col.location || 'Douala, Cameroon'}</td>
+                        <td className="p-2.5 text-[#5f5e5e] font-mono text-[11px]">
                           {new Date(col.timestamp || Date.now()).toLocaleDateString('en-GB', {
                             day: '2-digit',
                             month: 'short',
@@ -384,16 +402,16 @@ export const GenerateReportModal: React.FC<GenerateReportModalProps> = ({
                         </td>
                         <td className="p-2.5 text-right uppercase">
                           {col.status === 'COMPLETE' ? (
-                            <span className="text-[#0e7490] bg-[#ecfeff] border border-[#a5f3fc] px-2 py-0.5 font-bold text-[10px]">
+                            <span className="text-[#166534] bg-[#dcfce7] border border-[#86efac] px-2 py-0.5 font-bold text-[10px]">
                               SETTLED
                             </span>
                           ) : col.status === 'CANCELLED' ? (
-                            <span className="text-[#5f5e5e] bg-[#f3f3f3] border border-[#e5e5e5] px-2 py-0.5 font-bold text-[10px]">
+                            <span className="text-[#991b1b] bg-[#fee2e2] border border-[#fca5a5] px-2 py-0.5 font-bold text-[10px]">
                               CANCELLED
                             </span>
                           ) : (
-                            <span className="text-[#4a4a4a] bg-[#eeeeee] border border-[#e5e5e5] px-2 py-0.5 text-[10px]">
-                              DRAFT
+                            <span className="text-[#854d0e] bg-[#fef9c3] border border-[#fef08a] px-2 py-0.5 font-bold text-[10px]">
+                              PENDING
                             </span>
                           )}
                         </td>

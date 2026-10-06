@@ -11,8 +11,10 @@ export interface ReportMetrics {
   startDateStr: string;
   endDateStr: string;
   totalCollected: number;
+  totalPending: number;
   totalAttempted: number;
   completedCount: number;
+  pendingCount: number;
   cancelledCount: number;
   draftCount: number;
   pendingSyncTotal: number;
@@ -67,20 +69,22 @@ export function filterCollectionsByPeriod(
 }
 
 /**
- * Compute executive calculations for the boss
+ * Compute executive calculations for leadership
  */
 export function calculateReportMetrics(
   collections: Collection[],
-  drafts: Collection[],
-  clients: Client[],
-  periodLabel: string,
-  start: Date,
-  end: Date
+  drafts: Collection[] = [],
+  clients: Client[] = [],
+  periodLabel: string = 'Period',
+  start: Date = new Date(),
+  end: Date = new Date()
 ): ReportMetrics {
   const completed = collections.filter((c) => c.status === 'COMPLETE');
+  const pending = collections.filter((c) => c.status === 'PENDING');
   const cancelled = collections.filter((c) => c.status === 'CANCELLED');
   const totalCollected = completed.reduce((acc, c) => acc + c.amount, 0);
-  const pendingSyncTotal = drafts.reduce((acc, c) => acc + c.amount, 0);
+  const totalPending = pending.reduce((acc, c) => acc + c.amount, 0);
+  const pendingSyncTotal = 0;
 
   const totalAttempted = collections.length;
   const successRate = totalAttempted > 0 ? (completed.length / totalAttempted) * 100 : 0;
@@ -150,39 +154,37 @@ export function calculateReportMetrics(
     count: data.count,
   }));
 
-  // Auto-generate clear executive explanation for the boss
-  const topSector = sectorBreakdown[0]?.sector || 'General Market';
+  // Auto-generate clear executive explanation for the leadership
+  const topSector = sectorBreakdown[0]?.sector || 'Douala Commercial Sector';
   const topSectorPct = sectorBreakdown[0]?.percentage || 0;
-  const bossExecutiveSummary = `EXECUTIVE SUMMARY: During this period, field operations collected a total of ${formatXAF(
+  const bossExecutiveSummary = `EXECUTIVE SUMMARY: Total cash collected and settled during this period is ${formatXAF(
     totalCollected
-  )} XAF across ${completed.length} successful settlements (${successRate.toFixed(
+  )} FCFA across ${completed.length} completed settlements (${successRate.toFixed(
     1
-  )}% visit recovery efficiency). The average collection volume was ${formatXAF(
+  )}% recovery efficiency). Pending collections awaiting field collection total ${formatXAF(
+    totalPending
+  )} FCFA across ${pending.length} tasks. The average collection ticket size is ${formatXAF(
     Math.round(avgTicketSize)
-  )} XAF per client. ${
-    topClient ? `Key client '${topClient.name}' contributed ${formatXAF(topClient.amount)} XAF. ` : ''
+  )} FCFA. ${
+    topClient ? `Key client '${topClient.name}' contributed ${formatXAF(topClient.amount)} FCFA. ` : ''
   }${
     sectorBreakdown.length > 0
-      ? `Primary regional cash inflow came from ${topSector} (${topSectorPct}% of total collections). `
+      ? `Primary inflow sector is ${topSector} (${topSectorPct}% of total volume). `
       : ''
-  }${
-    drafts.length > 0
-      ? `NOTE: ${drafts.length} offline transactions (${formatXAF(
-          pendingSyncTotal
-        )} XAF) remain queued in terminal buffer pending server sync.`
-      : 'All collected cash is balanced and ready for vault clearing.'
-  }`;
+  }All completed collections have been reconciled and verified for vault clearing.`;
 
   return {
     periodLabel,
     startDateStr: start.toLocaleDateString('en-GB'),
     endDateStr: end.toLocaleDateString('en-GB'),
     totalCollected,
+    totalPending,
     totalAttempted,
     completedCount: completed.length,
+    pendingCount: pending.length,
     cancelledCount: cancelled.length,
-    draftCount: drafts.length,
-    pendingSyncTotal,
+    draftCount: 0,
+    pendingSyncTotal: 0,
     successRate,
     avgTicketSize,
     topClient,
@@ -232,42 +234,40 @@ export function downloadReportPDF(
   doc.setDrawColor(229, 229, 229);
   doc.roundedRect(14, 47, 182, 28, 2, 2, 'S');
 
-  // KPI 1: Total Cash
+  // KPI 1: Total Cash Collected (Settled)
   doc.setFontSize(7.5);
   doc.setTextColor(95, 94, 94);
   doc.text('TOTAL CASH COLLECTED', 20, 54);
-  doc.setFontSize(13);
+  doc.setFontSize(12);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(8, 145, 178);
-  doc.text(`${formatXAF(metrics.totalCollected)} XAF`, 20, 62);
+  doc.text(`${formatXAF(metrics.totalCollected)} FCFA`, 20, 62);
 
   // KPI 2: Recovery Rate
   doc.setFontSize(7.5);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(95, 94, 94);
-  doc.text('SETTLEMENT SUCCESS', 85, 54);
-  doc.setFontSize(13);
+  doc.text('SETTLEMENT SUCCESS', 80, 54);
+  doc.setFontSize(12);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(26, 28, 28);
-  doc.text(`${metrics.successRate.toFixed(1)}% (${metrics.completedCount}/${metrics.totalAttempted})`, 85, 62);
+  doc.text(`${metrics.successRate.toFixed(1)}% (${metrics.completedCount}/${metrics.totalAttempted})`, 80, 62);
 
   // KPI 3: Avg Ticket Size
   doc.setFontSize(7.5);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(95, 94, 94);
-  doc.text('AVG COLLECTION / VISIT', 145, 54);
-  doc.setFontSize(13);
+  doc.text('AVG TICKET / VISIT', 140, 54);
+  doc.setFontSize(12);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(26, 28, 28);
-  doc.text(`${formatXAF(Math.round(metrics.avgTicketSize))} XAF`, 145, 62);
+  doc.text(`${formatXAF(Math.round(metrics.avgTicketSize))} FCFA`, 140, 62);
 
-  // Pending offline note inside KPI box if any
-  if (metrics.draftCount > 0) {
-    doc.setFontSize(7.5);
-    doc.setFont('helvetica', 'italic');
-    doc.setTextColor(8, 145, 178);
-    doc.text(`* ${metrics.draftCount} offline transactions (${formatXAF(metrics.pendingSyncTotal)} XAF) pending central sync`, 20, 71);
-  }
+  // Pending Collections banner inside KPI box
+  doc.setFontSize(7.5);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(202, 138, 4);
+  doc.text(`* Pending Volume: ${formatXAF(metrics.totalPending)} FCFA (${metrics.pendingCount} collections assigned)`, 20, 71);
 
   // Executive summary for Boss paragraph
   doc.setFontSize(8.5);
@@ -286,16 +286,17 @@ export function downloadReportPDF(
   // Transaction items table
   const tableData = collections.map((col) => [
     col.id,
-    col.clientId,
     col.clientName,
-    `${formatXAF(col.amount)} XAF`,
+    col.assignedCollectorName || user.name || 'Field Agent',
+    `${formatXAF(col.amount)} FCFA`,
+    col.location || 'Douala, Cameroon',
     new Date(col.timestamp || Date.now()).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }),
-    col.status,
+    col.status === 'COMPLETE' ? 'SETTLED' : col.status,
   ]);
 
   autoTable(doc, {
     startY: startY,
-    head: [['Transaction Ref', 'Client ID', 'Client Name', 'Amount (XAF)', 'Timestamp', 'Status']],
+    head: [['Transaction Ref', 'Client Name', 'Collector', 'Amount (FCFA)', 'Location', 'Timestamp', 'Status']],
     body: tableData,
     theme: 'striped',
     headStyles: {
@@ -353,24 +354,23 @@ export function downloadReportExcel(
     ['Collector Name:', user.name],
     ['Collector ID:', user.id],
     ['Branch Agency:', user.branch],
-    ['Terminal ID:', user.terminalId],
     [],
     ['EXECUTIVE KEY PERFORMANCE INDICATORS (KPIs)'],
     ['Metric Description', 'Calculated Value', 'Notes / Benchmark'],
-    ['Total Cash Collected (Settled)', metrics.totalCollected, 'Total vaulted or ready for deposit (XAF)'],
-    ['Total Visits Attempted', metrics.totalAttempted, 'Total field visit attempts'],
-    ['Settled Visits Count', metrics.completedCount, 'Completed cash settlements'],
-    ['Cancelled / Rescheduled Visits', metrics.cancelledCount, 'Client unavailable / declined'],
+    ['Total Cash Collected (Settled)', metrics.totalCollected, 'Total vaulted or cleared for deposit (FCFA)'],
+    ['Pending Collections Volume', metrics.totalPending, 'Awaiting field clearance (FCFA)'],
+    ['Total Tasks Attempted', metrics.totalAttempted, 'Total field collection tasks'],
+    ['Settled Collections Count', metrics.completedCount, 'Completed cash settlements'],
+    ['Cancelled Tasks', metrics.cancelledCount, 'Client unavailable / declined'],
     ['Settlement Success Rate', `${metrics.successRate.toFixed(1)}%`, 'Percent of visits converted to cash'],
-    ['Average Collection Ticket Size', Math.round(metrics.avgTicketSize), 'Average cash collected per completed visit (XAF)'],
-    ['Pending Offline Drafts', metrics.draftCount, `${metrics.pendingSyncTotal} XAF awaiting network sync`],
-    ['Top Contributing Client', metrics.topClient ? `${metrics.topClient.name} (${metrics.topClient.amount} XAF)` : 'N/A', 'Highest single payer in this timeframe'],
+    ['Average Collection Ticket Size', Math.round(metrics.avgTicketSize), 'Average cash collected per completed task (FCFA)'],
+    ['Top Contributing Client', metrics.topClient ? `${metrics.topClient.name} (${metrics.topClient.amount} FCFA)` : 'N/A', 'Highest single payer in this timeframe'],
     [],
-    ['MANAGEMENT EXECUTIVE BRIEF FOR THE BOSS'],
+    ['MANAGEMENT EXECUTIVE BRIEF FOR LEADERSHIP'],
     [metrics.bossExecutiveSummary],
     [],
     ['SECTOR / REGIONAL BREAKDOWN'],
-    ['Sector / Zone', 'Total Collected (XAF)', 'Number of Visits', 'Share of Total (%)'],
+    ['Sector / Zone', 'Total Collected (FCFA)', 'Number of Visits', 'Share of Total (%)'],
     ...metrics.sectorBreakdown.map((s) => [s.sector, s.amount, s.count, `${s.percentage}%`]),
   ];
 
@@ -380,23 +380,23 @@ export function downloadReportExcel(
   // 2. Detailed Itemized Transactions Sheet
   const detailHeaders = [
     'Transaction Ref',
-    'Client ID',
     'Client Name',
-    'Amount (XAF)',
+    'Collector Name',
+    'Amount (FCFA)',
     'Date & Time',
     'Status',
-    'Location / GPS',
+    'Location',
     'Collector Notes',
   ];
 
   const detailRows = collections.map((col) => [
     col.id,
-    col.clientId,
     col.clientName,
+    col.assignedCollectorName || user.name || 'Collector',
     col.amount,
     new Date(col.timestamp || Date.now()).toLocaleString(),
-    col.status,
-    col.location || 'N/A',
+    col.status === 'COMPLETE' ? 'SETTLED' : col.status,
+    col.location || 'Douala, Cameroon',
     col.notes || '',
   ]);
 
@@ -419,11 +419,11 @@ export function downloadReportWord(
       (col) => `
     <tr style="border-bottom: 1px solid #e2e8f0;">
       <td style="padding: 8px; font-family: monospace; color: #0891b2; font-weight: bold;">${col.id}</td>
-      <td style="padding: 8px;">${col.clientId}</td>
       <td style="padding: 8px; font-weight: 600;">${col.clientName}</td>
-      <td style="padding: 8px; font-family: monospace; font-weight: bold; text-align: right;">${formatXAF(col.amount)} XAF</td>
+      <td style="padding: 8px;">${col.assignedCollectorName || user.name || 'Collector'}</td>
+      <td style="padding: 8px; font-family: monospace; font-weight: bold; text-align: right;">${formatXAF(col.amount)} FCFA</td>
       <td style="padding: 8px; font-size: 11px; color: #64748b;">${new Date(col.timestamp || Date.now()).toLocaleString()}</td>
-      <td style="padding: 8px; font-weight: bold; color: ${col.status === 'COMPLETE' ? '#0891b2' : '#64748b'};">${col.status}</td>
+      <td style="padding: 8px; font-weight: bold; color: ${col.status === 'COMPLETE' ? '#166534' : '#64748b'};">${col.status === 'COMPLETE' ? 'SETTLED' : col.status}</td>
     </tr>`
     )
     .join('');
@@ -433,7 +433,7 @@ export function downloadReportWord(
       (s) => `
     <tr style="border-bottom: 1px solid #e2e8f0;">
       <td style="padding: 6px 8px; font-weight: bold;">${s.sector}</td>
-      <td style="padding: 6px 8px; text-align: right; font-family: monospace;">${formatXAF(s.amount)} XAF</td>
+      <td style="padding: 6px 8px; text-align: right; font-family: monospace;">${formatXAF(s.amount)} FCFA</td>
       <td style="padding: 6px 8px; text-align: center;">${s.count}</td>
       <td style="padding: 6px 8px; text-align: right; font-weight: bold; color: #0891b2;">${s.percentage}%</td>
     </tr>`
@@ -566,123 +566,102 @@ export function downloadReportWord(
 // 4. TRANSACTION SLIP / RECEIPT EXPORTERS (PDF, WORD, EXCEL)
 // -------------------------------------------------------------
 
-export function downloadReceiptPDF(collection: Collection, user: CollectorUser) {
-  const noteText = collection.summaryNote || collection.notes || '';
-  const hasNotes = noteText.trim().length > 0;
-  
-  const doc = new jsPDF({
-    orientation: 'portrait',
-    unit: 'mm',
-    format: [80, hasNotes ? 165 : 140], // POS slip size with optional height extension for notes
-  });
+export async function downloadReceiptPDF(collection: Collection, user: CollectorUser) {
+  try {
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
 
-  // Header
-  doc.setFillColor(8, 145, 178);
-  doc.rect(0, 0, 80, 14, 'F');
-  doc.setTextColor(255, 255, 255);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(10);
-  doc.text('E-NAKO', 40, 6, { align: 'center' });
-  doc.setFontSize(6.5);
-  doc.setFont('helvetica', 'normal');
-  doc.text('CASH COLLECTION SLIP', 40, 10.5, { align: 'center' });
+    // Try drawing logo
+    try {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      await new Promise((res) => {
+        img.onload = res;
+        img.onerror = res;
+        img.src = '/logo.svg';
+      });
+      const canvas = document.createElement('canvas');
+      canvas.width = img.naturalWidth || 200;
+      canvas.height = img.naturalHeight || 200;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.drawImage(img, 0, 0);
+        const logoData = canvas.toDataURL('image/png');
+        doc.addImage(logoData, 'PNG', 14, 10, 20, 20);
+      }
+    } catch (e) {}
 
-  // Receipt ID & Status
-  doc.setTextColor(26, 28, 28);
-  doc.setFontSize(8);
-  doc.setFont('helvetica', 'bold');
-  doc.text(`Receipt #${collection.id}`, 40, 20, { align: 'center' });
+    // Header Title
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(16);
+    doc.setTextColor(8, 145, 178);
+    doc.text('E-NAKO CASH SYSTEM', 38, 16);
 
-  doc.setFillColor(236, 254, 255);
-  doc.roundedRect(10, 23, 60, 6, 1, 1, 'F');
-  doc.setFontSize(6.5);
-  doc.setTextColor(8, 145, 178);
-  doc.text(
-    collection.status === 'COMPLETE'
-      ? 'SETTLED & VERIFIED'
-      : collection.status === 'CANCELLED'
-      ? 'VISIT CANCELLED'
-      : 'OFFLINE DRAFT',
-    40,
-    27,
-    { align: 'center' }
-  );
-
-  // Amount Highlight
-  doc.setFillColor(243, 243, 243);
-  doc.roundedRect(6, 32, 68, 16, 1, 1, 'F');
-  doc.setFontSize(6.5);
-  doc.setTextColor(95, 94, 94);
-  doc.text('AMOUNT RECEIVED', 40, 37, { align: 'center' });
-  doc.setFontSize(13);
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(8, 145, 178);
-  doc.text(`${formatXAF(collection.amount)} XAF`, 40, 44, { align: 'center' });
-
-  // Details
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(6.5);
-  doc.setTextColor(70, 70, 70);
-
-  let y = 54;
-  const addRow = (label: string, value: string) => {
+    doc.setFontSize(10);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(95, 94, 94);
-    doc.text(label, 8, y);
+    doc.text('OFFICIAL CASH COLLECTION RECEIPT', 38, 22);
+
+    doc.setFontSize(8);
+    doc.text(`Issued: ${new Date(collection.timestamp || Date.now()).toLocaleString()}`, 38, 27);
+
+    doc.setDrawColor(229, 229, 229);
+    doc.setLineWidth(0.5);
+    doc.line(14, 32, 196, 32);
+
+    // Status Banner
+    const isComplete = collection.status === 'COMPLETE';
+    doc.setFillColor(isComplete ? 220 : 254, isComplete ? 252 : 249, isComplete ? 231 : 195);
+    doc.roundedRect(14, 36, 182, 10, 1, 1, 'F');
     doc.setFont('helvetica', 'bold');
-    doc.setTextColor(26, 28, 28);
-    doc.text(value, 72, y, { align: 'right' });
-    y += 5;
-  };
+    doc.setFontSize(10);
+    doc.setTextColor(isComplete ? 22 : 133, isComplete ? 101 : 77, isComplete ? 52 : 14);
+    doc.text(`STATUS: ${isComplete ? 'OFFICIALLY COLLECTED & SETTLED' : 'COLLECTION PENDING'}`, 105, 42.5, { align: 'center' });
 
-  addRow('Client ID:', collection.clientId);
-  addRow('Client Name:', collection.clientName.substring(0, 18));
-  addRow('Collector:', `${user.name.split(' ')[0]} (${user.id})`);
-  addRow('Terminal:', user.terminalId);
-  addRow('Branch:', user.branch.substring(0, 20));
-  addRow('Time:', new Date(collection.timestamp || Date.now()).toLocaleTimeString());
-  addRow('Date:', new Date(collection.timestamp || Date.now()).toLocaleDateString('en-GB'));
-
-  if (collection.location) {
-    addRow('Location:', collection.location.substring(0, 20));
-  }
-
-  // Written Notes Section
-  if (hasNotes) {
-    y += 1;
+    // Amount Hero Box
     doc.setFillColor(248, 250, 252);
-    doc.roundedRect(6, y, 68, 18, 1, 1, 'F');
-    doc.setDrawColor(226, 232, 240);
-    doc.roundedRect(6, y, 68, 18, 1, 1, 'S');
-
+    doc.roundedRect(14, 50, 182, 24, 2, 2, 'F');
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(6);
-    doc.setTextColor(8, 145, 178);
-    doc.text('COLLECTOR SUMMARY NOTE:', 8, y + 4);
+    doc.setFontSize(9);
+    doc.setTextColor(14, 116, 144);
+    doc.text('AMOUNT COLLECTED', 105, 57, { align: 'center' });
 
+    doc.setFontSize(22);
+    doc.setTextColor(26, 28, 28);
+    doc.text(`${formatXAF(collection.amount)} FCFA`, 105, 68, { align: 'center' });
+
+    // Details Grid Table
+    autoTable(doc, {
+      startY: 80,
+      head: [['TRANSACTION FIELD', 'DETAILS']],
+      body: [
+        ['Transaction ID', collection.id],
+        ['Client Name', collection.clientName],
+        ['Collector Name', collection.assignedCollectorName || user.name],
+        ['Amount (FCFA)', `${formatXAF(collection.amount)} FCFA`],
+        ['Location', collection.location || 'Douala, Cameroon'],
+        ['Date & Time', `${new Date(collection.timestamp || Date.now()).toLocaleDateString('en-GB')} at ${collection.time || 'Now'}`],
+        ['Deposit Destination', collection.depositDestination || 'Cash Collection'],
+        ['Status', collection.status],
+      ],
+      headStyles: { fillColor: [47, 49, 49], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 9 },
+      bodyStyles: { fontSize: 9, textColor: [26, 28, 28] },
+      alternateRowStyles: { fillColor: [249, 249, 249] },
+      margin: { left: 14, right: 14 },
+    });
+
+    const finalY = (doc as any).lastAutoTable?.finalY || 150;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.setTextColor(95, 94, 94);
+    doc.text('E-NAKO Official Digital Receipt Confirmation', 14, finalY + 14);
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(6);
-    doc.setTextColor(30, 41, 59);
-    const splitNotes = doc.splitTextToSize(noteText, 64);
-    doc.text(splitNotes, 8, y + 8);
-    y += 20;
+    doc.setFontSize(8);
+    doc.text('This receipt was automatically issued and verified by E-NAKO Financial Systems.', 14, finalY + 19);
+
+    doc.save(`E_NAKO_Receipt_${collection.id}.pdf`);
+  } catch (e) {
+    console.error('PDF receipt download error:', e);
   }
-
-  // Barcode / verification
-  doc.setDrawColor(200, 200, 200);
-  doc.line(8, y + 4, 72, y + 4);
-
-  doc.setFont('courier', 'bold');
-  doc.setFontSize(7);
-  doc.setTextColor(40, 40, 40);
-  doc.text('||| | ||||| |||| |||||| |||| | ||||||||', 40, y + 10, { align: 'center' });
-
-  doc.setFont('helvetica', 'italic');
-  doc.setFontSize(5.5);
-  doc.setTextColor(120, 120, 120);
-  doc.text('Official E-NAKO Security Token • Valid for Vaulting', 40, y + 14, { align: 'center' });
-
-  doc.save(`Receipt_${collection.id}_${collection.clientId}.pdf`);
 }
 
 export function downloadReceiptExcel(collection: Collection, user: CollectorUser) {

@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { 
-  Menu, 
-  RotateCw, 
-  Settings as SettingsIcon, 
+import {
+  Menu,
+  RotateCw,
+  Settings as SettingsIcon,
   User as UserIcon,
   Search,
   Wifi,
@@ -15,11 +15,6 @@ interface TopBarProps {
   currentView: ViewType;
   onNavigate: (view: ViewType) => void;
   user: CollectorUser;
-  isOffline: boolean;
-  onToggleOffline: () => void;
-  isSyncing: boolean;
-  onSync: () => void;
-  pendingDraftCount: number;
   onOpenSettings: () => void;
   onOpenProfile: () => void;
   onOpenMobileMenu: () => void;
@@ -31,11 +26,6 @@ export const TopBar: React.FC<TopBarProps> = ({
   currentView,
   onNavigate,
   user,
-  isOffline,
-  onToggleOffline,
-  isSyncing,
-  onSync,
-  pendingDraftCount,
   onOpenSettings,
   onOpenProfile,
   onOpenMobileMenu,
@@ -58,11 +48,11 @@ export const TopBar: React.FC<TopBarProps> = ({
             <Menu className="w-5 h-5 sm:w-6 sm:h-6" />
           </button>
 
-          <div 
+          <div
             onClick={() => onNavigate('dashboard')}
             className="flex items-center gap-2.5 cursor-pointer select-none min-w-0"
           >
-            <img src="/logo.png" alt="E-NAKO Logo" className="h-9 w-auto object-contain shrink-0" />
+            <img src="/logo.svg" alt="E-NAKO Logo" className="h-9 w-auto object-contain shrink-0" />
             <span className="font-bold text-base sm:text-lg md:text-xl text-[#0891b2] uppercase tracking-tight truncate">
               E-NAKO
             </span>
@@ -74,21 +64,19 @@ export const TopBar: React.FC<TopBarProps> = ({
           <nav className="flex gap-6 items-center">
             <button
               onClick={() => onNavigate('dashboard')}
-              className={`text-xs font-bold uppercase tracking-wider px-2 py-1 transition-all ${
-                currentView === 'dashboard'
+              className={`text-xs font-bold uppercase tracking-wider px-2 py-1 transition-all ${currentView === 'dashboard'
                   ? 'text-[#0891b2] border-b-2 border-[#0891b2] pb-1'
                   : 'text-[#5f5e5e] hover:text-[#1a1c1c]'
-              }`}
+                }`}
             >
               Dashboard
             </button>
             <button
               onClick={() => onNavigate('history')}
-              className={`text-xs font-bold uppercase tracking-wider px-2 py-1 transition-all ${
-                currentView === 'history'
+              className={`text-xs font-bold uppercase tracking-wider px-2 py-1 transition-all ${currentView === 'history'
                   ? 'text-[#0891b2] border-b-2 border-[#0891b2] pb-1'
                   : 'text-[#5f5e5e] hover:text-[#1a1c1c]'
-              }`}
+                }`}
             >
               History
             </button>

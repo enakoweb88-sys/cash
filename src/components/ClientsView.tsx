@@ -12,7 +12,11 @@ import {
   X,
   Phone,
   Mail,
-  RotateCw
+  RotateCw,
+  ShieldCheck,
+  CheckCircle2,
+  Briefcase,
+  Building
 } from 'lucide-react';
 import { Client, FilterOptions } from '../types';
 import { formatXAF, formatCommaNumber, cleanCommas } from '../data/mockData';
@@ -21,12 +25,14 @@ interface ClientsViewProps {
   clients: Client[];
   onSelectClientForCollection: (client: Client) => void;
   onAddNewClient: (client: Omit<Client, 'id'>) => void;
+  onSyncKyc?: () => void;
 }
 
 export const ClientsView: React.FC<ClientsViewProps> = ({
   clients,
   onSelectClientForCollection,
   onAddNewClient,
+  onSyncKyc,
 }) => {
   const [filters, setFilters] = useState<FilterOptions>({
     searchQuery: '',
@@ -38,10 +44,19 @@ export const ClientsView: React.FC<ClientsViewProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [newClientName, setNewClientName] = useState('');
   const [newClientAddress, setNewClientAddress] = useState('');
-  const [newClientRegion, setNewClientRegion] = useState<Client['region']>('Douala');
+  const [newClientRegion, setNewClientRegion] = useState('Global');
   const [newClientBalance, setNewClientBalance] = useState('0');
   const [newClientPhone, setNewClientPhone] = useState('');
   const [newClientEmail, setNewClientEmail] = useState('');
+
+  // Dynamically extract unique regions / countries from client directory
+  const availableRegions = useMemo(() => {
+    const set = new Set<string>();
+    clients.forEach((c) => {
+      if (c.region) set.add(c.region.trim());
+    });
+    return Array.from(set).sort();
+  }, [clients]);
 
   // Filter clients
   const filteredClients = useMemo(() => {
@@ -49,14 +64,21 @@ export const ClientsView: React.FC<ClientsViewProps> = ({
       // Search query
       if (filters.searchQuery.trim()) {
         const q = filters.searchQuery.toLowerCase();
-        const matchesName = client.name.toLowerCase().includes(q);
-        const matchesId = client.id.toLowerCase().includes(q);
-        const matchesAddr = client.address.toLowerCase().includes(q);
-        if (!matchesName && !matchesId && !matchesAddr) return false;
+        const matchesName = (client.name || '').toLowerCase().includes(q);
+        const matchesId = (client.id || '').toLowerCase().includes(q);
+        const matchesAddr = (client.address || '').toLowerCase().includes(q);
+        const matchesRegion = (client.region || '').toLowerCase().includes(q);
+        const matchesEmail = (client.email || '').toLowerCase().includes(q);
+        const matchesPhone = (client.phone || '').toLowerCase().includes(q);
+        const matchesCni = (client.idNumber || '').toLowerCase().includes(q);
+
+        if (!matchesName && !matchesId && !matchesAddr && !matchesRegion && !matchesEmail && !matchesPhone && !matchesCni) {
+          return false;
+        }
       }
 
       // Region filter
-      if (filters.region && client.region !== filters.region) {
+      if (filters.region && (client.region || '').toLowerCase() !== filters.region.toLowerCase()) {
         return false;
       }
 
@@ -84,7 +106,7 @@ export const ClientsView: React.FC<ClientsViewProps> = ({
       onAddNewClient({
         name: newClientName.trim(),
         address: newClientAddress.trim(),
-        region: newClientRegion,
+        region: newClientRegion.trim() || 'Global',
         lastVisit: 'Never',
         outstandingBalance: Number(cleanCommas(newClientBalance)) || 0,
         phone: newClientPhone.trim() || undefined,
@@ -94,6 +116,7 @@ export const ClientsView: React.FC<ClientsViewProps> = ({
       // Reset form
       setNewClientName('');
       setNewClientAddress('');
+      setNewClientRegion('Global');
       setNewClientBalance('0');
       setNewClientPhone('');
       setNewClientEmail('');
@@ -116,21 +139,36 @@ export const ClientsView: React.FC<ClientsViewProps> = ({
       {/* Header Section */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 pb-4 border-b border-[#e5e5e5]">
         <div>
-          <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-[#1a1c1c] mb-1">
-            Client Directory
+          <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-[#1a1c1c] mb-1 flex items-center gap-3">
+            <span>Client Directory</span>
+            <span className="text-xs bg-[#e0f2fe] text-[#0369a1] border border-[#bae6fd] px-2.5 py-1 font-bold uppercase tracking-wider">
+              {filteredClients.length} Profiles
+            </span>
           </h1>
           <p className="text-sm text-[#5f5e5e]">
-            Manage and locate clients for collection.
+            Manage client profiles automatically synced from approved KYC submissions and manual registrations.
           </p>
         </div>
 
-        <button
-          onClick={() => setIsAddModalOpen(true)}
-          className="w-full md:w-auto px-6 py-2.5 bg-[#0891b2] hover:bg-[#0e7490] text-white text-xs font-bold tracking-wider uppercase flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-sm"
-        >
-          <Plus className="w-4 h-4 stroke-[3]" />
-          <span>Add New Client</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+          {onSyncKyc && (
+            <button
+              onClick={onSyncKyc}
+              className="flex-1 md:flex-initial px-4 py-2.5 bg-white hover:bg-[#f2f2f2] border border-[#d6d6d6] text-[#1a1c1c] text-xs font-bold tracking-wider uppercase flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-xs"
+            >
+              <RotateCw className="w-4 h-4 text-[#0891b2]" />
+              <span>Sync Approved KYC</span>
+            </button>
+          )}
+
+          <button
+            onClick={() => setIsAddModalOpen(true)}
+            className="flex-1 md:flex-initial px-6 py-2.5 bg-[#0891b2] hover:bg-[#0e7490] text-white text-xs font-bold tracking-wider uppercase flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-sm"
+          >
+            <Plus className="w-4 h-4 stroke-[3]" />
+            <span>Add New Client</span>
+          </button>
+        </div>
       </div>
 
       {/* Search and Filter Bar */}
@@ -142,7 +180,7 @@ export const ClientsView: React.FC<ClientsViewProps> = ({
             type="text"
             value={filters.searchQuery}
             onChange={(e) => setFilters({ ...filters, searchQuery: e.target.value })}
-            placeholder="Search by name or ID..."
+            placeholder="Search by name, ID, email or address..."
             className="w-full py-2.5 pl-10 pr-8 bg-[#ffffff] border border-[#e5e5e5] focus:border-[#0891b2] focus:ring-1 focus:ring-[#0891b2] outline-none text-sm text-[#1a1c1c] placeholder:text-[#5f5e5e] transition-all"
           />
           {filters.searchQuery && (
@@ -164,10 +202,10 @@ export const ClientsView: React.FC<ClientsViewProps> = ({
               onChange={(e) => setFilters({ ...filters, region: e.target.value })}
               className="w-full py-2.5 pl-3.5 pr-8 bg-[#ffffff] border border-[#e5e5e5] appearance-none focus:border-[#0891b2] focus:ring-1 focus:ring-[#0891b2] outline-none text-xs sm:text-sm text-[#1a1c1c] cursor-pointer"
             >
-              <option value="">All Regions</option>
-              <option value="Douala">Douala</option>
-              <option value="Yaounde">Yaounde</option>
-              <option value="Buea">Buea</option>
+              <option value="">All Locations / Countries</option>
+              {availableRegions.map((reg) => (
+                <option key={reg} value={reg}>{reg}</option>
+              ))}
             </select>
             <ChevronDown className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-[#4a4a4a] pointer-events-none" />
           </div>
@@ -199,34 +237,72 @@ export const ClientsView: React.FC<ClientsViewProps> = ({
               className="p-4 md:p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-6 hover:bg-[#f3f3f3]/70 transition-colors group"
             >
               {/* Client Info */}
-              <div className="flex items-center gap-4 flex-1">
-                <div className="h-11 w-11 rounded-full border border-[#a5f3fc] flex items-center justify-center shrink-0 text-[#0891b2] font-bold text-xs bg-[#ecfeff] tracking-wider">
+              <div className="flex items-start gap-4 flex-1">
+                <div className="h-11 w-11 rounded-full border border-[#a5f3fc] flex items-center justify-center shrink-0 text-[#0891b2] font-bold text-xs bg-[#ecfeff] tracking-wider mt-0.5 shadow-xs">
                   {getInitials(client.name)}
                 </div>
 
-                <div>
-                  <h3 className="text-base font-bold text-[#1a1c1c] group-hover:text-[#0891b2] transition-colors">
-                    {client.name}
-                  </h3>
+                <div className="space-y-1 flex-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="text-base font-bold text-[#1a1c1c] group-hover:text-[#0891b2] transition-colors">
+                      {client.name}
+                    </h3>
 
-                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1 text-[#5f5e5e] text-xs">
+                    {client.kycStatus === 'APPROVED' && (
+                      <span className="px-2 py-0.5 bg-[#dcfce7] text-[#166534] border border-[#86efac] text-[10px] font-black uppercase tracking-wider flex items-center gap-1">
+                        <ShieldCheck className="w-3 h-3 text-[#16a34a]" />
+                        <span>KYC Verified</span>
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[#5f5e5e] text-xs">
                     <span className="flex items-center gap-1">
                       <MapPin className="w-3.5 h-3.5 text-[#4a4a4a]" />
-                      <span>{client.address}</span>
+                      <span>{client.address} ({client.region})</span>
                     </span>
-                    <span className="flex items-center gap-1">
-                      <Calendar className="w-3.5 h-3.5 text-[#4a4a4a]" />
-                      <span>Last Visit: {client.lastVisit}</span>
-                    </span>
+                    {client.phone && (
+                      <span className="flex items-center gap-1 font-mono">
+                        <Phone className="w-3.5 h-3.5 text-[#4a4a4a]" />
+                        <span>{client.phone}</span>
+                      </span>
+                    )}
+                    {client.email && (
+                      <span className="flex items-center gap-1">
+                        <Mail className="w-3.5 h-3.5 text-[#4a4a4a]" />
+                        <span>{client.email}</span>
+                      </span>
+                    )}
                     <span className="flex items-center gap-1 font-mono">
                       <Tag className="w-3.5 h-3.5 text-[#4a4a4a]" />
                       <span>ID: <strong className="text-[#1a1c1c]">{client.id}</strong></span>
                     </span>
                   </div>
+
+                  {/* Additional auto-extracted KYC details */}
+                  {(client.idNumber || client.occupation || client.bankName) && (
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pt-1 text-[11px] text-[#595959]">
+                      {client.idNumber && (
+                        <span className="bg-[#f2f2f2] px-2 py-0.5 border border-[#d6d6d6] font-mono">
+                          CNI/ID: <strong>{client.idNumber}</strong>
+                        </span>
+                      )}
+                      {client.occupation && (
+                        <span className="bg-[#f2f2f2] px-2 py-0.5 border border-[#d6d6d6]">
+                          Occ: <strong>{client.occupation}</strong>
+                        </span>
+                      )}
+                      {client.bankName && (
+                        <span className="bg-[#f2f2f2] px-2 py-0.5 border border-[#d6d6d6]">
+                          Bank: <strong>{client.bankName} {client.accountNumber ? `(${client.accountNumber})` : ''}</strong>
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
 
-              {/* Account Balance */}
+              {/* Account Balance & Quick Actions */}
               <div className="flex flex-row md:flex-col items-center md:items-end justify-between w-full md:w-auto gap-4 pt-4 md:pt-0 border-t border-[#e5e5e5] md:border-none">
                 <div className="text-left md:text-right">
                   <div className="text-[11px] font-bold uppercase tracking-wider mb-0.5 text-[#5f5e5e]">
@@ -237,6 +313,14 @@ export const ClientsView: React.FC<ClientsViewProps> = ({
                     <span className="text-xs font-normal text-[#5f5e5e] font-sans">FCFA</span>
                   </div>
                 </div>
+
+                <button
+                  onClick={() => onSelectClientForCollection(client)}
+                  className="px-3 py-1.5 bg-[#2f3131] hover:bg-black text-white text-[11px] font-bold uppercase tracking-wider transition-colors shadow-xs cursor-pointer flex items-center gap-1.5"
+                >
+                  <Banknote className="w-3.5 h-3.5 text-[#a5f3fc]" />
+                  <span>Start Collection</span>
+                </button>
               </div>
             </div>
           );
@@ -298,17 +382,15 @@ export const ClientsView: React.FC<ClientsViewProps> = ({
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-[11px] font-bold uppercase tracking-wider text-[#1a1c1c] mb-1.5">
-                    Region / Sector
+                    Region / Country / City
                   </label>
-                  <select
+                  <input
+                    type="text"
                     value={newClientRegion}
-                    onChange={(e) => setNewClientRegion(e.target.value as Client['region'])}
+                    onChange={(e) => setNewClientRegion(e.target.value)}
+                    placeholder="e.g. Douala, London, Nigeria, Paris, New York..."
                     className="w-full h-11 px-3 bg-[#ffffff] border border-[#e5e5e5] focus:border-[#0891b2] focus:ring-1 focus:ring-[#0891b2] outline-none text-sm"
-                  >
-                    <option value="Douala">Douala</option>
-                    <option value="Yaounde">Yaounde</option>
-                    <option value="Buea">Buea</option>
-                  </select>
+                  />
                 </div>
 
                 <div>

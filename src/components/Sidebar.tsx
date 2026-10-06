@@ -1,12 +1,17 @@
 import React from 'react';
-import { 
-  LayoutDashboard, 
-  Banknote, 
-  Users, 
-  FileText, 
-  HelpCircle, 
+import {
+  LayoutDashboard,
+  Banknote,
+  Users,
+  UserCheck,
+  FileText,
+  HelpCircle,
   LogOut,
-  X
+  X,
+  CreditCard,
+  ShieldCheck,
+  History,
+  TrendingUp
 } from 'lucide-react';
 import { ViewType, CollectorUser } from '../types';
 
@@ -31,7 +36,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
   mobileOpen = false,
   onCloseMobile,
 }) => {
-  const navItems = [
+  const isCeoOrManager = user?.role === 'CEO / Senior Manager' || user?.email === 'ceo@enako.com' || user?.role === 'CEO' || user?.role === 'Senior Manager' || user?.role === 'Branch Operations Lead';
+
+  const allNavItems = [
     {
       id: 'dashboard' as ViewType,
       label: 'Dashboard',
@@ -47,14 +54,44 @@ export const Sidebar: React.FC<SidebarProps> = ({
       label: 'Clients',
       icon: Users,
     },
+    {
+      id: 'collectors' as ViewType,
+      label: 'Collectors',
+      icon: UserCheck,
+    },
+    {
+      id: 'transactions' as ViewType,
+      label: 'FX Transactions',
+      icon: CreditCard,
+    },
+    {
+      id: 'update-rates' as ViewType,
+      label: 'Update Rates',
+      icon: TrendingUp,
+    },
+    {
+      id: 'kyc' as ViewType,
+      label: 'KYC Verification',
+      icon: ShieldCheck,
+    },
+    {
+      id: 'history' as ViewType,
+      label: 'Collection History',
+      icon: History,
+    },
   ];
+
+  // Collectors only see Dashboard, New Collection, and Collection History
+  const navItems = isCeoOrManager 
+    ? allNavItems 
+    : allNavItems.filter((item) => ['dashboard', 'new-collection', 'history'].includes(item.id));
 
   const sidebarContent = (
     <div className="flex flex-col h-full bg-[#2f3131] text-[#ffffff] select-none border-r border-[#e5e5e5]/10">
       {/* Header / Brand */}
       <div className="px-6 pt-6 pb-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <img src="/logo.png" alt="Company Logo" className="w-10 h-10 object-contain bg-white/10 p-1 rounded-lg shrink-0 shadow-sm" />
+          <img src="/logo.svg" alt="Company Logo" className="w-10 h-10 object-contain bg-white/10 p-1 rounded-lg shrink-0 shadow-sm" />
           <div className="min-w-0">
             <h1 className="font-bold text-base tracking-tight text-white leading-tight truncate">
               Collector Portal
@@ -66,7 +103,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
 
         {mobileOpen && onCloseMobile && (
-          <button 
+          <button
             onClick={onCloseMobile}
             className="md:hidden text-[#c8c6c5] hover:text-white p-1"
           >
@@ -79,7 +116,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <ul className="flex-1 flex flex-col gap-1 px-3 mt-4">
         {navItems.map((item) => {
           const Icon = item.icon;
-          const isActive = currentView === item.id;
+          const isActive = currentView === item.id || (item.id === 'transactions' && currentView === 'create-transaction');
           return (
             <li key={item.id}>
               <button
@@ -87,11 +124,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   onNavigate(item.id);
                   if (onCloseMobile) onCloseMobile();
                 }}
-                className={`w-full flex items-center gap-3.5 px-4 py-3 text-xs font-bold tracking-wider uppercase transition-all duration-150 text-left ${
-                  isActive
+                className={`w-full flex items-center gap-3.5 px-4 py-3 text-xs font-bold tracking-wider uppercase transition-all duration-150 text-left ${isActive
                     ? 'bg-[#0891b2] text-white border-l-4 border-[#22d3ee] font-black shadow-inner'
                     : 'text-[#c8c6c5] hover:bg-[#474746]/60 hover:text-white'
-                }`}
+                  }`}
               >
                 <Icon className="w-5 h-5 shrink-0" strokeWidth={isActive ? 2.2 : 1.8} />
                 <span>{item.label}</span>
@@ -154,7 +190,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* Mobile Drawer */}
       {mobileOpen && (
         <div className="fixed inset-0 z-50 md:hidden flex">
-          <div 
+          <div
             className="fixed inset-0 bg-black/60 backdrop-blur-xs transition-opacity"
             onClick={onCloseMobile}
           />

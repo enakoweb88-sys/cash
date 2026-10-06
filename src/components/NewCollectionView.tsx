@@ -14,24 +14,30 @@ import {
   Calendar,
   RotateCw
 } from 'lucide-react';
-import { Client, Collection, TransactionStatus, ViewType, TransactionType, DepositDestination } from '../types';
+import { Client, Collection, TransactionStatus, ViewType, TransactionType, DepositDestination, UserAccount, CollectorUser } from '../types';
 import { formatXAF, formatCommaNumber, cleanCommas } from '../data/mockData';
 
 interface NewCollectionViewProps {
   clients: Client[];
+  accounts?: UserAccount[];
+  currentUser?: CollectorUser;
   initialSelectedClient?: Client | null;
-  onSaveCollection: (collection: Omit<Collection, 'id'>, isDraft: boolean) => void;
+  onSaveCollection: (collection: Omit<Collection, 'id'>) => void;
   onNavigate: (view: ViewType) => void;
-  isOffline: boolean;
+  isOffline?: boolean;
 }
 
 export const NewCollectionView: React.FC<NewCollectionViewProps> = ({
   clients,
+  accounts = [],
+  currentUser,
   initialSelectedClient,
   onSaveCollection,
   onNavigate,
   isOffline,
 }) => {
+  const isCeoOrManager = currentUser?.role === 'CEO / Senior Manager' || currentUser?.email === 'ceo@enako.com' || currentUser?.role === 'CEO' || currentUser?.role === 'Senior Manager' || currentUser?.role === 'Branch Operations Lead';
+
   const [selectedClient, setSelectedClient] = useState<Client | null>(initialSelectedClient || null);
   const [clientSearchQuery, setClientSearchQuery] = useState(
     initialSelectedClient ? `${initialSelectedClient.id} - ${initialSelectedClient.name}` : ''
@@ -47,6 +53,13 @@ export const NewCollectionView: React.FC<NewCollectionViewProps> = ({
   const [isLocating, setIsLocating] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
+  // Assigned collector state - locked to currentUser for cash collectors
+  const [assignedCollectorId, setAssignedCollectorId] = useState<string>(
+    currentUser && !isCeoOrManager
+      ? currentUser.terminalId || currentUser.id
+      : accounts[0]?.terminalId || ''
+  );
+
   // Format current local time in ISO string for datetime-local
   const getCurrentDateTimeLocal = () => {
     const now = new Date();
@@ -55,7 +68,7 @@ export const NewCollectionView: React.FC<NewCollectionViewProps> = ({
   };
 
   const [collectionTime, setCollectionTime] = useState<string>(getCurrentDateTimeLocal());
-  const [transactionState, setTransactionState] = useState<TransactionStatus>('COMPLETE');
+  const [transactionState, setTransactionState] = useState<TransactionStatus>('PENDING');
   const [transactionType, setTransactionType] = useState<TransactionType>('COLLECTING');
   const [depositDestination, setDepositDestination] = useState<DepositDestination | ''>('');
   const [notes, setNotes] = useState<string>('');
@@ -124,16 +137,20 @@ export const NewCollectionView: React.FC<NewCollectionViewProps> = ({
     );
   };
 
-  // Handle Receipt photo
+  // Handle Receipt photo with persistent Base64 Data URL
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (files && files[0]) {
       const file = files[0];
-      const fakeUrl = URL.createObjectURL(file);
-      setReceiptFile({
-        name: file.name,
-        url: fakeUrl,
-      });
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const base64Url = event.target?.result as string;
+        setReceiptFile({
+          name: file.name,
+          url: base64Url,
+        });
+      };
+      reader.readAsDataURL(file);
     }
   };
 
@@ -145,11 +162,15 @@ export const NewCollectionView: React.FC<NewCollectionViewProps> = ({
     e.preventDefault();
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
       const file = e.dataTransfer.files[0];
-      const fakeUrl = URL.createObjectURL(file);
-      setReceiptFile({
-        name: file.name,
-        url: fakeUrl,
-      });
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const base64Url = event.target?.result as string;
+        setReceiptFile({
+          name: file.name,
+          url: base64Url,
+        });
+      };
+      reader.readAsDataURL(file);
     }
   };
 
@@ -170,7 +191,7 @@ export const NewCollectionView: React.FC<NewCollectionViewProps> = ({
     return true;
   };
 
-  const handleSave = (isDraft: boolean) => {
+  const handleSave = () => {
     if (!validateForm()) return;
     if (!selectedClient) return;
 
@@ -180,24 +201,25 @@ export const NewCollectionView: React.FC<NewCollectionViewProps> = ({
       const dateObj = new Date(collectionTime);
       const timeFormatted = `${dateObj.getHours().toString().padStart(2, '0')}:${dateObj.getMinutes().toString().padStart(2, '0')}`;
 
-      onSaveCollection(
-        {
-          clientId: selectedClient.id,
-          clientName: selectedClient.name,
-          amount: numAmount,
-          time: timeFormatted,
-          timestamp: dateObj.toISOString(),
-          status: isDraft ? 'PENDING' : transactionState,
-          type: transactionType,
-          depositDestination: transactionType === 'COLLECTING' ? (depositDestination as DepositDestination) : undefined,
-          location: location || selectedClient.address,
-          notes: notes || undefined,
-          receiptName: receiptFile?.name,
-          receiptUrl: receiptFile?.url,
-          isDraft: isDraft,
-        },
-        isDraft
-      );
+      const targetCollector = accounts.find((a) => a.terminalId === assignedCollectorId || a.id === assignedCollectorId);
+      const collectorName = targetCollector ? targetCollector.fullName : 'Field Cash Collector';
+
+      onSaveCollection({
+        clientId: selectedClient.id,
+        clientName: selectedClient.name,
+        amount: numAmount,
+        time: timeFormatted,
+        timestamp: dateObj.toISOString(),
+        status: transactionState,
+        type: transactionType,
+        depositDestination: transactionType === 'COLLECTING' ? (depositDestination as DepositDestination) : undefined,
+        location: location || selectedClient.address,
+        notes: notes || undefined,
+        receiptName: receiptFile?.name,
+        receiptUrl: receiptFile?.url,
+        assignedCollectorId: assignedCollectorId || targetCollector?.terminalId,
+        assignedCollectorName: collectorName,
+      });
       setIsSubmitting(false);
     }, 400);
   };
@@ -459,18 +481,47 @@ export const NewCollectionView: React.FC<NewCollectionViewProps> = ({
                 htmlFor="status"
                 className="block text-xs font-bold uppercase tracking-widest text-[#1a1c1c] mb-2"
               >
-                Transaction State
+                Initial Transaction State
               </label>
               <select
                 id="status"
                 value={transactionState}
                 onChange={(e) => setTransactionState(e.target.value as TransactionStatus)}
-                className="w-full h-12 px-4 bg-[#ffffff] border border-[#e5e5e5] focus:border-[#0891b2] focus:ring-1 focus:ring-[#0891b2] text-sm text-[#1a1c1c] font-bold outline-none cursor-pointer uppercase"
+                className="w-full h-12 px-4 bg-[#ffffff] border border-[#e5e5e5] focus:border-[#0891b2] focus:ring-1 focus:ring-[#0891b2] text-sm text-[#1a1c1c] font-bold outline-none cursor-pointer uppercase mb-4"
               >
-                <option value="COMPLETE">COMPLETE</option>
-                <option value="PENDING">PENDING</option>
+                <option value="PENDING">PENDING (Task Assigned)</option>
+                <option value="COMPLETE">COMPLETE (Settled Immediately)</option>
                 <option value="CANCELLED">CANCELLED</option>
               </select>
+
+              <label 
+                htmlFor="collector"
+                className="block text-xs font-bold uppercase tracking-widest text-[#0891b2] mb-2"
+              >
+                Assigned Cash Collector
+              </label>
+              {isCeoOrManager ? (
+                <select
+                  id="collector"
+                  value={assignedCollectorId}
+                  onChange={(e) => setAssignedCollectorId(e.target.value)}
+                  className="w-full h-12 px-4 bg-[#ffffff] border border-[#e5e5e5] focus:border-[#0891b2] focus:ring-1 focus:ring-[#0891b2] text-sm text-[#1a1c1c] font-bold outline-none cursor-pointer"
+                >
+                  <option value="">-- Select Field Collector --</option>
+                  {accounts.map((acc) => (
+                    <option key={acc.id} value={acc.terminalId}>
+                      {acc.fullName || `${acc.firstName} ${acc.lastName}`} ({acc.terminalId} - {acc.branch})
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <div className="w-full h-12 px-4 bg-[#f2f2f2] border border-[#d6d6d6] text-sm text-[#1a1c1c] font-bold flex items-center justify-between">
+                  <span>{currentUser?.name || 'Logged-In Agent'} ({currentUser?.terminalId || 'TRM-ACTIVE'} - {currentUser?.branch || 'Main Hub'})</span>
+                  <span className="text-[10px] font-black uppercase tracking-wider text-[#0891b2] bg-[#ecfeff] px-2 py-0.5 border border-[#a5f3fc]">
+                    Collector (Default)
+                  </span>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -519,18 +570,25 @@ export const NewCollectionView: React.FC<NewCollectionViewProps> = ({
           </p>
 
           {receiptFile ? (
-            <div className="inline-flex items-center gap-3 p-3 bg-[#ecfeff] border border-[#a5f3fc] text-xs">
-              <FileCheck className="w-4 h-4 text-[#0891b2]" />
-              <span className="font-mono font-bold text-[#0e7490] max-w-[200px] truncate">
-                Proof: {receiptFile.name}
-              </span>
-              <button
-                type="button"
-                onClick={() => setReceiptFile(null)}
-                className="text-[#ba1a1a] hover:underline font-bold"
-              >
-                Remove
-              </button>
+            <div className="flex flex-col items-center gap-3 p-4 bg-[#ecfeff] border border-[#a5f3fc]">
+              <img
+                src={receiptFile.url}
+                alt="Cash Proof Preview"
+                className="max-h-52 max-w-full object-contain rounded border border-[#a5f3fc] bg-white shadow-xs"
+              />
+              <div className="flex items-center gap-3 text-xs">
+                <FileCheck className="w-4 h-4 text-[#0891b2]" />
+                <span className="font-mono font-bold text-[#0e7490] max-w-[200px] truncate">
+                  Proof: {receiptFile.name}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setReceiptFile(null)}
+                  className="text-[#ba1a1a] hover:underline font-bold cursor-pointer"
+                >
+                  Remove & Re-snap
+                </button>
+              </div>
             </div>
           ) : (
             <button
@@ -550,7 +608,7 @@ export const NewCollectionView: React.FC<NewCollectionViewProps> = ({
           <button
             type="button"
             disabled={isSubmitting}
-            onClick={() => handleSave(false)}
+            onClick={() => handleSave()}
             className="w-full bg-[#0891b2] text-white h-12 text-xs font-bold hover:bg-[#0e7490] active:scale-[0.99] transition-all flex items-center justify-center gap-2 uppercase tracking-widest cursor-pointer shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
           >
             {isSubmitting ? (

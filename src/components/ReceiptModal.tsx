@@ -78,78 +78,61 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
             <h2 className="text-xl font-bold uppercase text-[#0891b2] tracking-tight">
               E-NAKO
             </h2>
-            <p className="text-xs font-semibold text-[#1a1c1c] uppercase mt-0.5">
-              Cash Collection Field Terminal Receipt
-            </p>
-            <p className="font-mono text-[11px] text-[#5f5e5e] mt-1">
-              Terminal: {user.terminalId} • Branch: {user.branch}
+            <p className="text-xs font-bold text-[#1a1c1c] uppercase mt-0.5">
+              Official Cash Collection Receipt
             </p>
           </div>
 
           {/* Status Badge */}
           <div className="flex justify-center">
             {collection.status === 'COMPLETE' ? (
-              <span className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-[#ecfeff] text-[#0e7490] text-xs font-bold tracking-widest border border-[#a5f3fc] uppercase">
-                <CheckCircle className="w-4 h-4 text-[#0891b2]" />
+              <span className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-[#dcfce7] text-[#166534] text-xs font-bold tracking-widest border border-[#86efac] uppercase">
+                <CheckCircle className="w-4 h-4 text-[#166534]" />
                 <span>OFFICIALLY COLLECTED & SETTLED</span>
               </span>
             ) : collection.status === 'CANCELLED' ? (
-              <span className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-[#eeeeee] text-[#5f5e5e] text-xs font-bold tracking-widest border border-[#e5e5e5] uppercase">
+              <span className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-[#fee2e2] text-[#991b1b] text-xs font-bold tracking-widest border border-[#fca5a5] uppercase">
                 <AlertTriangle className="w-4 h-4" />
-                <span>VISIT ATTEMPT CANCELLED</span>
+                <span>VISIT CANCELLED</span>
               </span>
             ) : (
-              <span className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-[#eeeeee] text-[#5f5e5e] text-xs font-bold tracking-widest border border-[#e5e5e5] uppercase">
-                <span>OFFLINE LOCAL DRAFT (PENDING SYNC)</span>
+              <span className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-[#fef9c3] text-[#854d0e] text-xs font-bold tracking-widest border border-[#fef08a] uppercase">
+                <span>COLLECTION PENDING</span>
               </span>
             )}
           </div>
 
           {/* Core Details Grid */}
-          <div className="bg-[#f9f9f9] border border-[#e5e5e5] p-4 space-y-3 font-mono text-xs">
+          <div className="bg-[#f9f9f9] border border-[#e5e5e5] p-4 space-y-3 font-sans text-xs">
             <div className="flex justify-between border-b border-[#e5e5e5] pb-2">
-              <span className="text-[#5f5e5e] uppercase">Transaction Ref</span>
-              <span className="font-bold text-[#1a1c1c]">{collection.id}</span>
+              <span className="text-[#5f5e5e] font-bold uppercase">Transaction ID</span>
+              <span className="font-mono font-bold text-[#0891b2]">{collection.id}</span>
             </div>
 
             <div className="flex justify-between border-b border-[#e5e5e5] pb-2">
-              <span className="text-[#5f5e5e] uppercase">Client ID</span>
-              <span className="font-bold text-[#0891b2]">{collection.clientId}</span>
+              <span className="text-[#5f5e5e] font-bold uppercase">Client Name</span>
+              <span className="font-bold text-[#1a1c1c]">{collection.clientName}</span>
             </div>
 
             <div className="flex justify-between border-b border-[#e5e5e5] pb-2">
-              <span className="text-[#5f5e5e] uppercase">Client Name</span>
-              <span className="font-bold text-[#1a1c1c] font-sans">{collection.clientName}</span>
+              <span className="text-[#5f5e5e] font-bold uppercase">Collector Name</span>
+              <span className="font-bold text-[#1a1c1c]">{collection.assignedCollectorName || user.name}</span>
             </div>
 
             <div className="flex justify-between border-b border-[#e5e5e5] pb-2">
-              <span className="text-[#5f5e5e] uppercase">Collector Officer</span>
-              <span className="font-bold text-[#1a1c1c] font-sans">{user.name} ({user.id})</span>
+              <span className="text-[#5f5e5e] font-bold uppercase">Date & Time</span>
+              <span className="font-medium text-[#1a1c1c]">{new Date(collection.timestamp || Date.now()).toLocaleDateString('en-GB')} at {collection.time || 'Now'}</span>
             </div>
 
             <div className="flex justify-between border-b border-[#e5e5e5] pb-2">
-              <span className="text-[#5f5e5e] uppercase">Timestamp</span>
-              <span className="font-bold text-[#1a1c1c]">{new Date(collection.timestamp).toLocaleString()}</span>
+              <span className="text-[#5f5e5e] font-bold uppercase">Deposit Destination</span>
+              <span className="font-semibold text-[#1a1c1c]">{collection.depositDestination || 'Cash Collection'}</span>
             </div>
-
-            <div className="flex justify-between border-b border-[#e5e5e5] pb-2">
-              <span className="text-[#5f5e5e] uppercase">Transaction Type</span>
-              <span className={`font-bold uppercase ${collection.type === 'PAYOUT' ? 'text-[#ba1a1a]' : 'text-[#0891b2]'}`}>
-                {collection.type || 'COLLECTING'}
-              </span>
-            </div>
-
-            {collection.depositDestination && (
-              <div className="flex justify-between border-b border-[#e5e5e5] pb-2">
-                <span className="text-[#5f5e5e] uppercase">Deposit Bank</span>
-                <span className="font-bold text-[#0891b2] font-sans">{collection.depositDestination}</span>
-              </div>
-            )}
 
             <div className="flex justify-between">
-              <span className="text-[#5f5e5e] uppercase">GPS / Location</span>
-              <span className="font-bold text-[#1a1c1c] max-w-[200px] text-right truncate">
-                {collection.location || 'Field Point'}
+              <span className="text-[#5f5e5e] font-bold uppercase">Location</span>
+              <span className="font-medium text-[#1a1c1c] max-w-[220px] text-right truncate">
+                {collection.location || 'Douala, Cameroon'}
               </span>
             </div>
           </div>

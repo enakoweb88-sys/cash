@@ -4,15 +4,15 @@ import { CollectorUser } from '../types';
 
 interface SupportModalProps {
   user: CollectorUser;
-  isOffline: boolean;
-  draftCount: number;
+  isOffline?: boolean;
+  draftCount?: number;
   onClose: () => void;
 }
 
 export const SupportModal: React.FC<SupportModalProps> = ({
   user,
-  isOffline,
-  draftCount,
+  isOffline = false,
+  draftCount = 0,
   onClose,
 }) => {
   return (
