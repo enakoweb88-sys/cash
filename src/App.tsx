@@ -36,6 +36,7 @@ import {
   settleRemoteTransaction,
   sendCollectionNotificationEmail
 } from './api/cashApi';
+import { generateReceiptPdfBase64 } from './utils/exportUtils';
 import { CheckCircle2, AlertCircle, RefreshCw } from 'lucide-react';
 
 export default function App() {
@@ -393,9 +394,15 @@ export default function App() {
     // Trigger automated email dispatch to client with receipt PDF attached
     const targetClient = clients.find((c) => c.id === data.clientId || c.name === data.clientName);
     const recipientEmail = data.clientEmail || targetClient?.email || 'enakoweb88@gmail.com';
-    sendCollectionNotificationEmail(newRecord, recipientEmail, 'CREATED');
+    let pdfBase64: string | undefined;
+    try {
+      pdfBase64 = generateReceiptPdfBase64(newRecord, { name: data.assignedCollectorName || user.name, terminalId: user.terminalId });
+    } catch (err) {
+      console.warn('Could not generate receipt PDF base64 for email:', err);
+    }
+    sendCollectionNotificationEmail(newRecord, recipientEmail, 'CREATED', pdfBase64);
 
-    showToast(`Collection ${newId} created & receipt email dispatched to ${recipientEmail}!`, 'success');
+    showToast(`Collection ${newId} created & receipt PDF dispatched to ${recipientEmail}!`, 'success');
     setActiveReceipt(newRecord);
     setCurrentView('dashboard');
 
@@ -466,7 +473,13 @@ export default function App() {
         const col = targetCollection as Collection;
         const targetClient = clients.find((c) => c.id === col.clientId || c.name === col.clientName);
         const recipientEmail = col.clientEmail || targetClient?.email || 'enakoweb88@gmail.com';
-        sendCollectionNotificationEmail(col, recipientEmail, 'COMPLETED');
+        let pdfBase64: string | undefined;
+        try {
+          pdfBase64 = generateReceiptPdfBase64(col, { name: col.assignedCollectorName || user.name, terminalId: user.terminalId });
+        } catch (err) {
+          console.warn('Could not generate settlement receipt PDF base64 for email:', err);
+        }
+        sendCollectionNotificationEmail(col, recipientEmail, 'COMPLETED', pdfBase64);
 
         setClients((prevClients) =>
           prevClients.map((client) => {

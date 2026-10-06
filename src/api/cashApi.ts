@@ -675,7 +675,8 @@ export function getInitialKycApprovedClients(): Client[] {
 export async function sendCollectionNotificationEmail(
   collection: Collection,
   clientEmail?: string,
-  eventType: 'CREATED' | 'COMPLETED' = 'CREATED'
+  eventType: 'CREATED' | 'COMPLETED' = 'CREATED',
+  pdfBase64?: string
 ): Promise<boolean> {
   const targetEmail = clientEmail || collection.clientEmail || 'enakoweb88@gmail.com';
   const cleanId = collection.id.replace(/^COL-/, '');
@@ -686,7 +687,7 @@ export async function sendCollectionNotificationEmail(
     ? `E-NAKO CASH RECEIPT: Collection #${cleanId} (${amountStr})`
     : `✔ E-NAKO SETTLEMENT CONFIRMATION: Collection #${cleanId} Completed (${amountStr})`;
 
-  console.log(`[AUTOMATED EMAIL DISPATCH] Sending ${eventType} receipt email to: ${targetEmail}`);
+  console.log(`[AUTOMATED EMAIL DISPATCH] Sending ${eventType} receipt email from cash@enakoos.com to: ${targetEmail}`);
 
   const endpoints = [
     `${API_BASE_URL}/cash-collections/send-receipt`,
@@ -706,6 +707,7 @@ export async function sendCollectionNotificationEmail(
     status: collection.status,
     time: collection.time || new Date().toLocaleString(),
     depositDestination: collection.depositDestination,
+    pdfBase64,
   };
 
   let dispatched = false;

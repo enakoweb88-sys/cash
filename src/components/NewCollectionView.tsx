@@ -329,33 +329,31 @@ export const NewCollectionView: React.FC<NewCollectionViewProps> = ({
               )}
             </div>
           )}
-        </div>
 
-        {/* Client Notification Email Field */}
-        <div className="bg-[#ffffff] p-6 border border-[#e5e5e5]">
-          <div className="flex items-center justify-between mb-2">
-            <label 
-              htmlFor="client_email"
-              className="block text-xs font-bold uppercase tracking-widest text-[#1a1c1c]"
-            >
-              Client Notification Email
-            </label>
-            <span className="text-[11px] font-semibold text-[#0891b2] bg-[#ecfeff] px-2 py-0.5 border border-[#a5f3fc]">
-              Automated Receipt Dispatch
-            </span>
-          </div>
-          <input
-            id="client_email"
-            type="email"
-            value={clientEmail}
-            onChange={(e) => setClientEmail(e.target.value)}
-            placeholder="e.g. enakoweb88@gmail.com"
-            className="w-full h-12 px-4 bg-[#ffffff] border border-[#e5e5e5] focus:border-[#0891b2] focus:ring-1 focus:ring-[#0891b2] text-sm text-[#1a1c1c] placeholder:text-[#94a3b8] outline-none transition-all"
-          />
-          <p className="text-[11px] text-[#5f5e5e] mt-1.5 flex items-center gap-1.5">
-            <Check className="w-3.5 h-3.5 text-[#16a34a]" />
-            Official branded receipt with transaction details will be dispatched immediately to this email.
-          </p>
+          {/* Selected Client Profile Card (Phone, Email, KYC Verified) */}
+          {selectedClient && (
+            <div className="mt-4 p-4 bg-[#f8fafc] border border-[#e2e8f0] flex flex-col md:flex-row md:items-center md:justify-between gap-3 text-xs">
+              <div>
+                <div className="font-bold text-[#0f172a] text-sm flex items-center gap-2">
+                  <span>{selectedClient.name}</span>
+                  <span className="font-mono text-[10px] text-[#0891b2] font-semibold bg-[#ecfeff] px-1.5 py-0.5 border border-[#a5f3fc]">
+                    {selectedClient.id}
+                  </span>
+                </div>
+                <div className="text-[#64748b] flex flex-wrap items-center gap-3 mt-1.5">
+                  {selectedClient.phone && (
+                    <span className="font-medium text-[#334155]">📞 {selectedClient.phone}</span>
+                  )}
+                  <span className="font-medium text-[#0891b2]">✉ {selectedClient.email || clientEmail || 'Client email attached'}</span>
+                  <span>📍 {selectedClient.address}</span>
+                </div>
+              </div>
+              <div className="shrink-0 flex items-center gap-1.5 text-[11px] font-semibold text-[#15803d] bg-[#f0fdf4] px-3 py-1.5 border border-[#bbf7d0]">
+                <Check className="w-4 h-4 text-[#16a34a]" />
+                <span>PDF Receipt Dispatched via cash@enakoos.com</span>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Transaction Category: Collecting vs Payout */}

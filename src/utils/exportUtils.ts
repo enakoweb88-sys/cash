@@ -566,43 +566,23 @@ export function downloadReportWord(
 // 4. TRANSACTION SLIP / RECEIPT EXPORTERS (PDF, WORD, EXCEL)
 // -------------------------------------------------------------
 
-export async function downloadReceiptPDF(collection: Collection, user: CollectorUser) {
+export function buildReceiptPdfDocument(collection: Collection, user?: { name?: string; terminalId?: string }): jsPDF {
   try {
     const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-
-    // Try drawing logo
-    try {
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
-      await new Promise((res) => {
-        img.onload = res;
-        img.onerror = res;
-        img.src = '/logo.svg';
-      });
-      const canvas = document.createElement('canvas');
-      canvas.width = img.naturalWidth || 200;
-      canvas.height = img.naturalHeight || 200;
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-        ctx.drawImage(img, 0, 0);
-        const logoData = canvas.toDataURL('image/png');
-        doc.addImage(logoData, 'PNG', 14, 10, 20, 20);
-      }
-    } catch (e) {}
 
     // Header Title
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(16);
     doc.setTextColor(8, 145, 178);
-    doc.text('E-NAKO CASH SYSTEM', 38, 16);
+    doc.text('E-NAKO CASH SYSTEM', 14, 18);
 
     doc.setFontSize(10);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(95, 94, 94);
-    doc.text('OFFICIAL CASH COLLECTION RECEIPT', 38, 22);
+    doc.text('OFFICIAL CASH COLLECTION RECEIPT', 14, 24);
 
     doc.setFontSize(8);
-    doc.text(`Issued: ${new Date(collection.timestamp || Date.now()).toLocaleString()}`, 38, 27);
+    doc.text(`Issued: ${new Date(collection.timestamp || Date.now()).toLocaleString()}`, 14, 29);
 
     doc.setDrawColor(229, 229, 229);
     doc.setLineWidth(0.5);
@@ -636,12 +616,13 @@ export async function downloadReceiptPDF(collection: Collection, user: Collector
       body: [
         ['Transaction ID', collection.id],
         ['Client Name', collection.clientName],
-        ['Collector Name', collection.assignedCollectorName || user.name],
+        ['Collector Name', collection.assignedCollectorName || user?.name || 'Field Cash Collector'],
         ['Amount (FCFA)', `${formatXAF(collection.amount)} FCFA`],
         ['Location', collection.location || 'Douala, Cameroon'],
         ['Date & Time', `${new Date(collection.timestamp || Date.now()).toLocaleDateString('en-GB')} at ${collection.time || 'Now'}`],
         ['Deposit Destination', collection.depositDestination || 'Cash Collection'],
-        ['Status', collection.status],
+        ['Dispatch Channel', 'cash@enakoos.com'],
+        ['Status', collection.status === 'COMPLETE' ? 'OFFICIALLY COLLECTED & SETTLED' : 'COLLECTION PENDING'],
       ],
       headStyles: { fillColor: [47, 49, 49], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 9 },
       bodyStyles: { fontSize: 9, textColor: [26, 28, 28] },
@@ -656,11 +637,33 @@ export async function downloadReceiptPDF(collection: Collection, user: Collector
     doc.text('E-NAKO Official Digital Receipt Confirmation', 14, finalY + 14);
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(8);
-    doc.text('This receipt was automatically issued and verified by E-NAKO Financial Systems.', 14, finalY + 19);
+    doc.text('This receipt was automatically issued and verified by E-NAKO Financial Systems (cash@enakoos.com).', 14, finalY + 19);
 
+    return doc;
+  } catch (e) {
+    console.error('PDF receipt build error:', e);
+    return new jsPDF();
+  }
+}
+
+export function downloadReceiptPDF(collection: Collection, user: CollectorUser) {
+  try {
+    const doc = buildReceiptPdfDocument(collection, user);
     doc.save(`E_NAKO_Receipt_${collection.id}.pdf`);
   } catch (e) {
     console.error('PDF receipt download error:', e);
+  }
+}
+
+export function generateReceiptPdfBase64(collection: Collection, user?: { name?: string; terminalId?: string }): string {
+  try {
+    const doc = buildReceiptPdfDocument(collection, user);
+    const dataUri = doc.output('datauristring');
+    const commaIdx = dataUri.indexOf(',');
+    return commaIdx !== -1 ? dataUri.substring(commaIdx + 1) : dataUri;
+  } catch (e) {
+    console.warn('PDF base64 generation error:', e);
+    return '';
   }
 }
 
