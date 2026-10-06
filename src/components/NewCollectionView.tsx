@@ -39,6 +39,7 @@ export const NewCollectionView: React.FC<NewCollectionViewProps> = ({
   const isCeoOrManager = currentUser?.role === 'CEO / Senior Manager' || currentUser?.email === 'ceo@enako.com' || currentUser?.role === 'CEO' || currentUser?.role === 'Senior Manager' || currentUser?.role === 'Branch Operations Lead';
 
   const [selectedClient, setSelectedClient] = useState<Client | null>(initialSelectedClient || null);
+  const [clientEmail, setClientEmail] = useState<string>(initialSelectedClient?.email || '');
   const [clientSearchQuery, setClientSearchQuery] = useState(
     initialSelectedClient ? `${initialSelectedClient.id} - ${initialSelectedClient.name}` : ''
   );
@@ -86,6 +87,9 @@ export const NewCollectionView: React.FC<NewCollectionViewProps> = ({
       setSelectedClient(initialSelectedClient);
       setClientSearchQuery(`${initialSelectedClient.id} - ${initialSelectedClient.name}`);
       setLocation(initialSelectedClient.address);
+      if (initialSelectedClient.email) {
+        setClientEmail(initialSelectedClient.email);
+      }
       if (initialSelectedClient.outstandingBalance > 0 && !amount) {
         setAmount(String(initialSelectedClient.outstandingBalance));
       }
@@ -107,6 +111,9 @@ export const NewCollectionView: React.FC<NewCollectionViewProps> = ({
     setSelectedClient(client);
     setClientSearchQuery(`${client.id} - ${client.name}`);
     setLocation(client.address);
+    if (client.email) {
+      setClientEmail(client.email);
+    }
     if (!amount && client.outstandingBalance > 0) {
       setAmount(String(client.outstandingBalance));
     }
@@ -219,6 +226,7 @@ export const NewCollectionView: React.FC<NewCollectionViewProps> = ({
         receiptUrl: receiptFile?.url,
         assignedCollectorId: assignedCollectorId || targetCollector?.terminalId,
         assignedCollectorName: collectorName,
+        clientEmail: clientEmail.trim() || selectedClient.email || undefined,
       });
       setIsSubmitting(false);
     }, 400);
@@ -321,6 +329,33 @@ export const NewCollectionView: React.FC<NewCollectionViewProps> = ({
               )}
             </div>
           )}
+        </div>
+
+        {/* Client Notification Email Field */}
+        <div className="bg-[#ffffff] p-6 border border-[#e5e5e5]">
+          <div className="flex items-center justify-between mb-2">
+            <label 
+              htmlFor="client_email"
+              className="block text-xs font-bold uppercase tracking-widest text-[#1a1c1c]"
+            >
+              Client Notification Email
+            </label>
+            <span className="text-[11px] font-semibold text-[#0891b2] bg-[#ecfeff] px-2 py-0.5 border border-[#a5f3fc]">
+              Automated Receipt Dispatch
+            </span>
+          </div>
+          <input
+            id="client_email"
+            type="email"
+            value={clientEmail}
+            onChange={(e) => setClientEmail(e.target.value)}
+            placeholder="e.g. enakoweb88@gmail.com"
+            className="w-full h-12 px-4 bg-[#ffffff] border border-[#e5e5e5] focus:border-[#0891b2] focus:ring-1 focus:ring-[#0891b2] text-sm text-[#1a1c1c] placeholder:text-[#94a3b8] outline-none transition-all"
+          />
+          <p className="text-[11px] text-[#5f5e5e] mt-1.5 flex items-center gap-1.5">
+            <Check className="w-3.5 h-3.5 text-[#16a34a]" />
+            Official branded receipt with transaction details will be dispatched immediately to this email.
+          </p>
         </div>
 
         {/* Transaction Category: Collecting vs Payout */}

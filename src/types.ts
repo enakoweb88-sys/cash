@@ -58,6 +58,7 @@ export interface Collection {
   currency?: string;
   exchangeRate?: number;
   fxTransactionId?: string;
+  clientEmail?: string;
 }
 
 export interface FxTransaction {

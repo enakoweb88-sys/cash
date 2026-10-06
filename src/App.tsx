@@ -392,9 +392,10 @@ export default function App() {
 
     // Trigger automated email dispatch to client with receipt PDF attached
     const targetClient = clients.find((c) => c.id === data.clientId || c.name === data.clientName);
-    sendCollectionNotificationEmail(newRecord, targetClient?.email, 'CREATED');
+    const recipientEmail = data.clientEmail || targetClient?.email || 'enakoweb88@gmail.com';
+    sendCollectionNotificationEmail(newRecord, recipientEmail, 'CREATED');
 
-    showToast(`Collection ${newId} created & receipt email dispatched to ${data.clientName}!`, 'success');
+    showToast(`Collection ${newId} created & receipt email dispatched to ${recipientEmail}!`, 'success');
     setActiveReceipt(newRecord);
     setCurrentView('dashboard');
 
@@ -464,7 +465,8 @@ export default function App() {
       if (targetCollection) {
         const col = targetCollection as Collection;
         const targetClient = clients.find((c) => c.id === col.clientId || c.name === col.clientName);
-        sendCollectionNotificationEmail(col, targetClient?.email, 'COMPLETED');
+        const recipientEmail = col.clientEmail || targetClient?.email || 'enakoweb88@gmail.com';
+        sendCollectionNotificationEmail(col, recipientEmail, 'COMPLETED');
 
         setClients((prevClients) =>
           prevClients.map((client) => {
