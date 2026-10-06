@@ -3,10 +3,7 @@ import { Client, Collection, TransactionStatus } from '../types';
 const getApiBaseUrl = () => {
   const envUrl = (import.meta as any).env?.VITE_API_URL;
   if (envUrl) return envUrl;
-  if (typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
-    return 'https://api.enakoos.com/api/v1';
-  }
-  return 'http://localhost:5000/api/v1';
+  return 'https://api.enakoos.com/api/v1';
 };
 
 const API_BASE_URL = getApiBaseUrl();
@@ -14,7 +11,7 @@ const API_BASE_URL = getApiBaseUrl();
 export async function fetchRemoteCollections(): Promise<Collection[]> {
   try {
     const res = await fetch(`${API_BASE_URL}/cash-collections?limit=100`, {
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
     });
     if (!res.ok) throw new Error('Failed to fetch from backend');
     const data = await res.json();
@@ -84,7 +81,7 @@ export async function createRemoteCollection(collection: Collection): Promise<bo
 
     const res = await fetch(`${API_BASE_URL}/cash-collections`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
       body: JSON.stringify(payload),
     });
 
@@ -102,7 +99,7 @@ export async function updateRemoteCollectionStatus(
   try {
     const res = await fetch(`${API_BASE_URL}/cash-collections/${collectionId}/status`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
       body: JSON.stringify({ status }),
     });
 
