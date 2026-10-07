@@ -442,11 +442,31 @@ export default function App() {
     extra: number, 
     summaryNote: string
   ) => {
-    let targetCollection: Collection | null = null;
+    // Locate target collection synchronously from state
+    const existingCol = collections.find((c) => c.id === collectionId);
+    const updatedCol: Collection = existingCol
+      ? {
+          ...existingCol,
+          status: newStatus,
+          shortageAmount: shortage,
+          extraAmount: extra,
+          summaryNote: summaryNote,
+        }
+      : {
+          id: collectionId,
+          clientId: 'C-CLIENT',
+          clientName: 'Client',
+          amount: 0,
+          time: 'Now',
+          status: newStatus,
+          shortageAmount: shortage,
+          extraAmount: extra,
+          summaryNote: summaryNote,
+        };
+
     setCollections((prevCollections) =>
       prevCollections.map((col) => {
         if (col.id === collectionId) {
-          targetCollection = col;
           return {
             ...col,
             status: newStatus,
@@ -468,23 +488,22 @@ export default function App() {
       settleRemoteTransaction(fxId, shortage);
       settleRemoteTransaction(collectionId, shortage);
 
-      // Deduct from client balance if targetCollection found
-      if (targetCollection) {
-        const col = targetCollection as Collection;
-        const targetClient = clients.find((c) => c.id === col.clientId || c.name === col.clientName);
-        const recipientEmail = col.clientEmail || targetClient?.email || 'enakoweb88@gmail.com';
-        let pdfBase64: string | undefined;
-        try {
-          pdfBase64 = generateReceiptPdfBase64(col, { name: col.assignedCollectorName || user.name, terminalId: user.terminalId });
-        } catch (err) {
-          console.warn('Could not generate settlement receipt PDF base64 for email:', err);
-        }
-        sendCollectionNotificationEmail(col, recipientEmail, 'COMPLETED', pdfBase64);
+      // Deduct from client balance and dispatch completion alert
+      const targetClient = clients.find((c) => c.id === updatedCol.clientId || c.name === updatedCol.clientName);
+      const recipientEmail = updatedCol.clientEmail || targetClient?.email || 'enakoweb88@gmail.com';
+      let pdfBase64: string | undefined;
+      try {
+        pdfBase64 = generateReceiptPdfBase64(updatedCol, { name: updatedCol.assignedCollectorName || user.name, terminalId: user.terminalId });
+      } catch (err) {
+        console.warn('Could not generate settlement receipt PDF base64 for email:', err);
+      }
+      sendCollectionNotificationEmail(updatedCol, recipientEmail, 'COMPLETED', pdfBase64);
 
+      if (existingCol) {
         setClients((prevClients) =>
           prevClients.map((client) => {
-            if (client.id === col.clientId || client.name === col.clientName) {
-              const newBalance = Math.max(0, client.outstandingBalance - col.amount);
+            if (client.id === existingCol.clientId || client.name === existingCol.clientName) {
+              const newBalance = Math.max(0, client.outstandingBalance - existingCol.amount);
               return {
                 ...client,
                 outstandingBalance: newBalance,
@@ -495,7 +514,7 @@ export default function App() {
           })
         );
       }
-      showToast(`Collection #${collectionId} COMPLETED & update email sent to ${targetCollection ? (targetCollection as Collection).clientName : 'client'}!`, 'success');
+      showToast(`Collection #${collectionId} COMPLETED & update email sent to ${recipientEmail}!`, 'success');
     } else {
       showToast(`Transaction #${collectionId} status updated to ${newStatus}.`, 'success');
     }

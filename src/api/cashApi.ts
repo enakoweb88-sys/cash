@@ -70,6 +70,7 @@ export async function createRemoteCollection(collection: Collection): Promise<bo
     };
 
     const payload = {
+      id: collection.id,
       clientName: collection.clientName,
       location: collection.location || 'Douala Field Sector',
       amountCollected: Number(collection.amount),

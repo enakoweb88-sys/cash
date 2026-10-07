@@ -203,7 +203,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   </div>
                   <div className="flex justify-between">
                     <span className="text-[#595959] uppercase font-bold">From:</span>
-                    <span className="text-[#1a1c1c]">E-NAKO Financial Services &lt;notifications@enako.cm&gt;</span>
+                    <span className="text-[#1a1c1c]">"ENAKO Cash Desk" &lt;cash@enakoos.com&gt;</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-[#595959] uppercase font-bold">Subject:</span>
