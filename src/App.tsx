@@ -39,6 +39,37 @@ import {
 import { generateReceiptPdfBase64 } from './utils/exportUtils';
 import { CheckCircle2, AlertCircle, RefreshCw } from 'lucide-react';
 
+const VALID_VIEWS: ViewType[] = [
+  'dashboard',
+  'new-collection',
+  'clients',
+  'collectors',
+  'history',
+  'transactions',
+  'create-transaction',
+  'update-rates',
+  'kyc',
+];
+
+const getInitialView = (): ViewType => {
+  if (typeof window !== 'undefined') {
+    const hash = window.location.hash.replace(/^#\/?/, '').trim() as ViewType;
+    if (VALID_VIEWS.includes(hash)) {
+      return hash;
+    }
+    const urlParams = new URLSearchParams(window.location.search);
+    const viewParam = (urlParams.get('view') || urlParams.get('tab')) as ViewType;
+    if (viewParam && VALID_VIEWS.includes(viewParam)) {
+      return viewParam;
+    }
+    const saved = localStorage.getItem('enako_cash_current_view') as ViewType;
+    if (saved && VALID_VIEWS.includes(saved)) {
+      return saved;
+    }
+  }
+  return 'dashboard';
+};
+
 export default function App() {
   // Accounts Database (Persistent in localStorage)
   const [accounts, setAccounts] = useState<UserAccount[]>(() => {
@@ -52,9 +83,39 @@ export default function App() {
     return saved ? JSON.parse(saved) : INITIAL_USER;
   });
 
-  // Current Screen / View
-  const [currentView, setCurrentView] = useState<ViewType>('dashboard');
+  // Current Screen / View (Persisted across page reloads via URL hash & localStorage)
+  const [currentView, setCurrentView] = useState<ViewType>(getInitialView);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  // Sync currentView with localStorage and URL hash
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('enako_cash_current_view', currentView);
+      if (window.location.hash !== `#${currentView}`) {
+        window.history.replaceState(null, '', `#${currentView}`);
+      }
+    }
+  }, [currentView]);
+
+  // Listen to browser Back/Forward navigation or manual hash changes
+  useEffect(() => {
+    const handleHashChange = () => {
+      const hash = window.location.hash.replace(/^#\/?/, '').trim() as ViewType;
+      if (VALID_VIEWS.includes(hash)) {
+        setCurrentView(hash);
+      }
+    };
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
+
+  // Ensure field collectors stay within authorized views
+  useEffect(() => {
+    const isCeoOrManager = user?.role === 'CEO / Senior Manager' || user?.email === 'ceo@enako.com' || user?.role === 'CEO' || user?.role === 'Senior Manager' || user?.role === 'Branch Operations Lead';
+    if (!isCeoOrManager && !['dashboard', 'new-collection', 'history'].includes(currentView)) {
+      setCurrentView('dashboard');
+    }
+  }, [user, currentView]);
 
   // Auto-clear data on first load if requested to start completely clean
   useEffect(() => {
@@ -329,6 +390,11 @@ export default function App() {
   // Logout handler
   const handleLogout = () => {
     setUser({ ...user, isLoggedIn: false });
+    localStorage.removeItem('enako_cash_current_view');
+    if (typeof window !== 'undefined') {
+      window.history.replaceState(null, '', ' ');
+    }
+    setCurrentView('dashboard');
     showToast('Signed out of terminal successfully.', 'info');
   };
 
