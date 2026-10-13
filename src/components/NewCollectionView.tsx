@@ -45,7 +45,12 @@ export const NewCollectionView: React.FC<NewCollectionViewProps> = ({
   );
   const [showClientDropdown, setShowClientDropdown] = useState(false);
 
-  const [amount, setAmount] = useState<string>(
+  const [targetAmount, setTargetAmount] = useState<string>(
+    initialSelectedClient && initialSelectedClient.outstandingBalance > 0 
+      ? String(initialSelectedClient.outstandingBalance) 
+      : ''
+  );
+  const [actualAmountCollected, setActualAmountCollected] = useState<string>(
     initialSelectedClient && initialSelectedClient.outstandingBalance > 0 
       ? String(initialSelectedClient.outstandingBalance) 
       : ''
@@ -90,8 +95,9 @@ export const NewCollectionView: React.FC<NewCollectionViewProps> = ({
       if (initialSelectedClient.email) {
         setClientEmail(initialSelectedClient.email);
       }
-      if (initialSelectedClient.outstandingBalance > 0 && !amount) {
-        setAmount(String(initialSelectedClient.outstandingBalance));
+      if (initialSelectedClient.outstandingBalance > 0 && !targetAmount) {
+        setTargetAmount(String(initialSelectedClient.outstandingBalance));
+        setActualAmountCollected(String(initialSelectedClient.outstandingBalance));
       }
     }
   }, [initialSelectedClient]);
@@ -114,8 +120,9 @@ export const NewCollectionView: React.FC<NewCollectionViewProps> = ({
     if (client.email) {
       setClientEmail(client.email);
     }
-    if (!amount && client.outstandingBalance > 0) {
-      setAmount(String(client.outstandingBalance));
+    if (!targetAmount && client.outstandingBalance > 0) {
+      setTargetAmount(String(client.outstandingBalance));
+      setActualAmountCollected(String(client.outstandingBalance));
     }
     setShowClientDropdown(false);
     setErrorMessage(null);
@@ -186,9 +193,9 @@ export const NewCollectionView: React.FC<NewCollectionViewProps> = ({
       setErrorMessage('Please select a valid client from the directory or search.');
       return false;
     }
-    const numAmount = Number(cleanCommas(amount));
-    if (isNaN(numAmount) || numAmount <= 0) {
-      setErrorMessage('Please enter a valid collection amount in XAF.');
+    const numTarget = Number(cleanCommas(targetAmount));
+    if (isNaN(numTarget) || numTarget <= 0) {
+      setErrorMessage('Please enter a valid target collection amount in XAF.');
       return false;
     }
     if (transactionType === 'COLLECTING' && !depositDestination) {
@@ -204,7 +211,13 @@ export const NewCollectionView: React.FC<NewCollectionViewProps> = ({
 
     setIsSubmitting(true);
     setTimeout(() => {
-      const numAmount = Number(cleanCommas(amount));
+      const numTarget = Number(cleanCommas(targetAmount));
+      const numActual = actualAmountCollected.trim() !== '' 
+        ? Number(cleanCommas(actualAmountCollected)) 
+        : (transactionState === 'COMPLETE' ? numTarget : 0);
+      const shortage = Math.max(0, numTarget - numActual);
+      const extra = Math.max(0, numActual - numTarget);
+
       const dateObj = new Date(collectionTime);
       const timeFormatted = `${dateObj.getHours().toString().padStart(2, '0')}:${dateObj.getMinutes().toString().padStart(2, '0')}`;
 
@@ -214,7 +227,11 @@ export const NewCollectionView: React.FC<NewCollectionViewProps> = ({
       onSaveCollection({
         clientId: selectedClient.id,
         clientName: selectedClient.name,
-        amount: numAmount,
+        amount: numActual > 0 ? numActual : numTarget,
+        targetAmount: numTarget,
+        actualAmountCollected: numActual,
+        shortageAmount: shortage,
+        extraAmount: extra,
         time: timeFormatted,
         timestamp: dateObj.toISOString(),
         status: transactionState,
@@ -415,45 +432,120 @@ export const NewCollectionView: React.FC<NewCollectionViewProps> = ({
           </div>
         )}
 
-        {/* Amount Input */}
-        <div className="bg-[#ffffff] p-4 sm:p-6 border border-[#e5e5e5] relative overflow-hidden">
-          <div className="relative z-10 flex flex-col md:flex-row gap-4 sm:gap-6 items-stretch md:items-end">
-            <div className="flex-1 w-full">
+        {/* Target and Actual Received Amounts */}
+        <div className="bg-[#ffffff] p-4 sm:p-6 border border-[#e5e5e5] space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Target Amount */}
+            <div>
               <label 
-                htmlFor="amount"
-                className="block text-xs font-bold uppercase tracking-widest text-[#0891b2] mb-2"
+                htmlFor="target_amount"
+                className="block text-xs font-bold uppercase tracking-widest text-[#4a4a4a] mb-2"
               >
-                Amount Collected
+                Target / Expected Amount
               </label>
-
-              <div className="relative flex items-center border border-[#e5e5e5] bg-[#ffffff] focus-within:border-[#0891b2] focus-within:ring-1 focus-within:ring-[#0891b2] transition-all">
-                <span className="pl-3 sm:pl-4 font-mono text-base sm:text-xl font-bold text-[#4a4a4a] select-none shrink-0">
+              <div className="relative flex items-center border border-[#e5e5e5] bg-[#ffffff] focus-within:border-[#0891b2] transition-all">
+                <span className="pl-3 sm:pl-4 font-mono text-sm sm:text-base font-bold text-[#4a4a4a] select-none shrink-0">
                   XAF
                 </span>
                 <input
-                  id="amount"
+                  id="target_amount"
                   type="text"
-                  value={formatCommaNumber(amount)}
+                  value={formatCommaNumber(targetAmount)}
                   onChange={(e) => {
-                    setAmount(cleanCommas(e.target.value));
+                    const clean = cleanCommas(e.target.value);
+                    setTargetAmount(clean);
+                    if (!actualAmountCollected || actualAmountCollected === targetAmount) {
+                      setActualAmountCollected(clean);
+                    }
                     setErrorMessage(null);
                   }}
                   placeholder="0"
-                  className="w-full h-14 sm:h-16 px-3 sm:px-4 bg-transparent border-none focus:ring-0 text-2xl sm:text-4xl md:text-5xl font-bold text-[#1a1c1c] text-right tracking-tight outline-none font-mono tabular-nums"
+                  className="w-full h-12 sm:h-14 px-3 bg-transparent border-none focus:ring-0 text-xl sm:text-2xl font-bold text-[#1a1c1c] text-right font-mono tabular-nums outline-none"
                 />
               </div>
+              <p className="text-[11px] text-[#5f5e5e] mt-1">Total expected volume to collect</p>
             </div>
 
-            {/* Outstanding balance box */}
-            <div className="w-full md:w-auto bg-[#eeeeee] p-3 sm:p-4 border border-[#e5e5e5] shrink-0 min-w-[160px] flex md:block justify-between items-center">
-              <p className="text-xs font-bold uppercase tracking-widest text-[#4a4a4a] mb-0 md:mb-1">
-                Outstanding Bal.
-              </p>
-              <p className="font-mono text-base sm:text-lg font-bold text-[#1a1c1c] tabular-nums">
-                {formatXAF(outstandingBal)} <span className="text-xs font-sans text-[#5f5e5e]">XAF</span>
-              </p>
+            {/* Actually Received Amount */}
+            <div>
+              <div className="flex justify-between items-center mb-2">
+                <label 
+                  htmlFor="actual_amount"
+                  className="block text-xs font-bold uppercase tracking-widest text-[#0891b2]"
+                >
+                  Actually Received
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setActualAmountCollected(targetAmount)}
+                  className="text-[10px] text-[#0891b2] hover:underline font-bold"
+                >
+                  Full Amount Paid
+                </button>
+              </div>
+              <div className="relative flex items-center border-2 border-[#0891b2] bg-[#ffffff] focus-within:ring-1 focus-within:ring-[#0891b2] transition-all">
+                <span className="pl-3 sm:pl-4 font-mono text-sm sm:text-base font-bold text-[#0891b2] select-none shrink-0">
+                  XAF
+                </span>
+                <input
+                  id="actual_amount"
+                  type="text"
+                  value={formatCommaNumber(actualAmountCollected)}
+                  onChange={(e) => {
+                    setActualAmountCollected(cleanCommas(e.target.value));
+                    setErrorMessage(null);
+                  }}
+                  placeholder="0"
+                  className="w-full h-12 sm:h-14 px-3 bg-transparent border-none focus:ring-0 text-xl sm:text-2xl font-bold text-[#1a1c1c] text-right font-mono tabular-nums outline-none"
+                />
+              </div>
+              <p className="text-[11px] text-[#0891b2] mt-1">Cash handed over by client on arrival</p>
             </div>
           </div>
+
+          {/* Live Shortfall / Lacking Balance Box */}
+          {(() => {
+            const numT = Number(cleanCommas(targetAmount)) || 0;
+            const numA = Number(cleanCommas(actualAmountCollected)) || 0;
+            const short = Math.max(0, numT - numA);
+            const extra = Math.max(0, numA - numT);
+
+            if (short > 0) {
+              return (
+                <div className="p-3.5 bg-[#fef2f2] border border-[#fecaca] text-[#991b1b] flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                  <div className="flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 text-[#dc2626] shrink-0" />
+                    <div>
+                      <span className="font-bold">Balance Lacking (Shortfall): </span>
+                      <span className="font-mono font-extrabold text-sm">{formatXAF(short)} XAF</span>
+                    </div>
+                  </div>
+                  <span className="self-start sm:self-auto text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 bg-[#fee2e2] border border-[#fca5a5]">
+                    Lacking Amount Logged on Dashboard
+                  </span>
+                </div>
+              );
+            } else if (extra > 0) {
+              return (
+                <div className="p-3 bg-[#f0fdf4] border border-[#bbf7d0] text-[#166534] flex items-center justify-between text-xs font-semibold">
+                  <div className="flex items-center gap-2">
+                    <Check className="w-4 h-4 text-[#16a34a] shrink-0" />
+                    <span>Surplus payment of {formatXAF(extra)} XAF received over target.</span>
+                  </div>
+                </div>
+              );
+            } else if (numT > 0) {
+              return (
+                <div className="p-3 bg-[#f0fdf4] border border-[#bbf7d0] text-[#166534] flex items-center justify-between text-xs font-semibold">
+                  <div className="flex items-center gap-2">
+                    <Check className="w-4 h-4 text-[#16a34a] shrink-0" />
+                    <span>Full target collection matched. 0 XAF shortage.</span>
+                  </div>
+                </div>
+              );
+            }
+            return null;
+          })()}
         </div>
 
         {/* Details Grid */}

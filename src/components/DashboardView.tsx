@@ -53,8 +53,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const isCeoOrManager = user?.role === 'CEO / Senior Manager' || user?.email === 'ceo@enako.com' || user?.role === 'CEO' || user?.role === 'Senior Manager' || user?.role === 'Branch Operations Lead';
   const firstName = user?.name ? user.name.trim().split(' ')[0] : 'Collector';
 
-  // State for Field Collector tab view ('available' vs 'settled')
-  const [collectorTab, setCollectorTab] = useState<'available' | 'settled'>('available');
+  // State for Field Collector tab view ('available' vs 'settled' vs 'lacking')
+  const [collectorTab, setCollectorTab] = useState<'available' | 'settled' | 'lacking'>('available');
 
   // State for standalone Job Details Page view (replacing popup modals)
   const [selectedJobDetails, setSelectedJobDetails] = useState<Collection | null>(null);
@@ -95,10 +95,51 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const availableJobs = collectorCollections.filter((c) => c.status === 'PENDING');
   const settledJobs = collectorCollections.filter((c) => c.status === 'COMPLETE');
 
+  // Lacking / Deficit Jobs (where client gave less than target)
+  const lackingJobs = collectorCollections.filter((c) => {
+    const target = c.targetAmount || c.amount || 0;
+    const actual = c.actualAmountCollected !== undefined 
+      ? c.actualAmountCollected 
+      : (c.status === 'COMPLETE' ? c.amount : 0);
+    const short = c.shortageAmount !== undefined && c.shortageAmount > 0 
+      ? c.shortageAmount 
+      : Math.max(0, target - actual);
+    return short > 0;
+  });
+
+  const totalLackingAmount = lackingJobs.reduce((sum, c) => {
+    const target = c.targetAmount || c.amount || 0;
+    const actual = c.actualAmountCollected !== undefined 
+      ? c.actualAmountCollected 
+      : (c.status === 'COMPLETE' ? c.amount : 0);
+    const short = c.shortageAmount !== undefined && c.shortageAmount > 0 
+      ? c.shortageAmount 
+      : Math.max(0, target - actual);
+    return sum + short;
+  }, 0);
+
+  const totalActualCollected = collectorCollections.reduce((sum, c) => {
+    const actual = c.actualAmountCollected !== undefined 
+      ? c.actualAmountCollected 
+      : (c.status === 'COMPLETE' ? c.amount : 0);
+    return sum + actual;
+  }, 0);
+
   // CEO / Executive Totals
   const totalCompletedAmount = collections
     .filter((c) => c.status === 'COMPLETE')
     .reduce((sum, c) => sum + c.amount, 0);
+
+  const totalCompanyLackingAmount = collections.reduce((sum, c) => {
+    const target = c.targetAmount || c.amount || 0;
+    const actual = c.actualAmountCollected !== undefined 
+      ? c.actualAmountCollected 
+      : (c.status === 'COMPLETE' ? c.amount : 0);
+    const short = c.shortageAmount !== undefined && c.shortageAmount > 0 
+      ? c.shortageAmount 
+      : Math.max(0, target - actual);
+    return sum + short;
+  }, 0);
 
   const pendingCount = collections.filter((c) => c.status === 'PENDING').length;
 
@@ -272,24 +313,76 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           {/* Left Column (2 Cols): Transaction Info Breakdown */}
           <div className="lg:col-span-2 space-y-6">
             {/* Hero Amount Banner */}
-            <div className="bg-white border border-[#e5e5e5] border-l-4 border-l-[#0891b2] p-6 shadow-xs flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-              <div>
-                <span className="text-[10px] font-bold uppercase tracking-wider text-[#0891b2]">TOTAL COLLECTED AMOUNT</span>
-                <div className="text-3xl font-black text-[#1a1c1c] font-mono mt-1">
-                  {formatXAF(selectedJobDetails.amount)} <span className="text-sm font-sans font-bold text-[#595959]">FCFA</span>
-                </div>
-                <p className="text-xs text-[#595959] mt-1">
-                  Transaction Reference: <strong className="font-mono text-[#1a1c1c]">{selectedJobDetails.id}</strong>
-                </p>
-              </div>
+            {(() => {
+              const tgt = selectedJobDetails.targetAmount || selectedJobDetails.amount || 0;
+              const act = selectedJobDetails.actualAmountCollected !== undefined 
+                ? selectedJobDetails.actualAmountCollected 
+                : (selectedJobDetails.status === 'COMPLETE' ? selectedJobDetails.amount : 0);
+              const shortage = selectedJobDetails.shortageAmount !== undefined && selectedJobDetails.shortageAmount > 0
+                ? selectedJobDetails.shortageAmount
+                : Math.max(0, tgt - act);
 
-              <div className="px-4 py-3 bg-[#ecfeff] border border-[#a5f3fc] text-right">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-[#0e7490] block">DATE & TIME RECORDED</span>
-                <span className="text-xs font-mono font-bold text-[#1a1c1c] block mt-0.5">
-                  {new Date(selectedJobDetails.timestamp || Date.now()).toLocaleDateString('en-GB')} at {selectedJobDetails.time || '11:27 AM'}
-                </span>
-              </div>
-            </div>
+              return (
+                <div className="bg-white border border-[#e5e5e5] border-l-4 border-l-[#0891b2] p-6 shadow-xs flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                  <div className="space-y-2">
+                    <div className="flex flex-wrap items-center gap-4">
+                      <div>
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-[#4a4a4a] block">TARGET EXPECTED</span>
+                        <div className="text-xl font-bold text-[#1a1c1c] font-mono">
+                          {formatXAF(tgt)} <span className="text-xs font-sans text-[#595959]">FCFA</span>
+                        </div>
+                      </div>
+
+                      <div className="h-8 w-px bg-[#e5e5e5] hidden sm:block" />
+
+                      <div>
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-[#0891b2] block">ACTUALLY RECEIVED</span>
+                        <div className="text-2xl font-black text-[#0891b2] font-mono">
+                          {formatXAF(act)} <span className="text-xs font-sans text-[#595959]">FCFA</span>
+                        </div>
+                      </div>
+
+                      {shortage > 0 && (
+                        <>
+                          <div className="h-8 w-px bg-[#e5e5e5] hidden sm:block" />
+                          <div>
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-[#ba1a1a] block">BALANCE LACKING</span>
+                            <div className="text-2xl font-black text-[#ba1a1a] font-mono">
+                              {formatXAF(shortage)} <span className="text-xs font-sans text-[#ba1a1a]">FCFA</span>
+                            </div>
+                          </div>
+                        </>
+                      )}
+                    </div>
+
+                    <p className="text-xs text-[#595959]">
+                      Transaction Reference: <strong className="font-mono text-[#1a1c1c]">{selectedJobDetails.id}</strong>
+                    </p>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row items-end gap-2.5 w-full md:w-auto">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const target = selectedJobDetails;
+                        if (onOpenStatusUpdate) onOpenStatusUpdate(target);
+                        else onSelectCollection(target);
+                      }}
+                      className="w-full sm:w-auto px-4 py-2 bg-[#ba1a1a] hover:bg-[#93000a] text-white text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-xs"
+                    >
+                      <span>Update Received Cash</span>
+                    </button>
+
+                    <div className="px-4 py-2 bg-[#ecfeff] border border-[#a5f3fc] text-right w-full sm:w-auto">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-[#0e7490] block">RECORDED TIME</span>
+                      <span className="text-xs font-mono font-bold text-[#1a1c1c] block mt-0.5">
+                        {new Date(selectedJobDetails.timestamp || Date.now()).toLocaleDateString('en-GB')} at {selectedJobDetails.time || '11:27 AM'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Specifications Bento Card */}
             <div className="bg-white border border-[#e5e5e5] shadow-xs overflow-hidden">
@@ -513,12 +606,88 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         </div>
 
-        {/* Tab Navigation for Available vs Settled Jobs */}
-        <div className="bg-white border border-[#e5e5e5] p-2 shadow-xs flex items-center justify-between">
-          <div className="flex items-center gap-2">
+        {/* Operation Metrics Cards (Deficit, Volume, Tasks) */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {/* Card 1: Outstanding Shortfall / Balance Lacking Card */}
+          <div 
+            onClick={() => setCollectorTab('lacking')}
+            className="bg-white border border-[#e5e5e5] border-l-4 border-l-[#ba1a1a] p-5 shadow-xs flex flex-col justify-between cursor-pointer hover:border-[#ba1a1a] transition-all group"
+          >
+            <div className="flex justify-between items-center text-[#595959]">
+              <span className="text-[10px] font-bold tracking-wider uppercase text-[#ba1a1a]">
+                Balance Lacking / Shortfall
+              </span>
+              <AlertCircle className="w-5 h-5 text-[#ba1a1a]" />
+            </div>
+
+            <div className="my-3">
+              <span className="text-3xl font-black text-[#ba1a1a] font-mono">
+                {formatXAF(totalLackingAmount)}
+              </span>
+              <span className="text-sm font-bold text-[#ba1a1a] ml-2">FCFA</span>
+            </div>
+
+            <div className="flex items-center justify-between text-[11px] pt-2 border-t border-[#fef2f2]">
+              <span className="text-[#595959]">{lackingJobs.length} transactions with deficit</span>
+              <span className="font-bold text-[#ba1a1a] group-hover:underline flex items-center gap-0.5">
+                <span>View All</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </span>
+            </div>
+          </div>
+
+          {/* Card 2: Total Collected Volume */}
+          <div className="bg-white border border-[#e5e5e5] border-l-4 border-l-[#0891b2] p-5 shadow-xs flex flex-col justify-between">
+            <div className="flex justify-between items-center text-[#595959]">
+              <span className="text-[10px] font-bold tracking-wider uppercase text-[#0891b2]">
+                Total Received Volume
+              </span>
+              <Wallet className="w-5 h-5 text-[#0891b2]" />
+            </div>
+
+            <div className="my-3">
+              <span className="text-3xl font-black text-[#1a1c1c] font-mono">
+                {formatXAF(totalActualCollected)}
+              </span>
+              <span className="text-sm font-bold text-[#595959] ml-2">FCFA</span>
+            </div>
+
+            <div className="text-[11px] text-[#0891b2] font-semibold pt-2 border-t border-[#f0fdf4]">
+              {settledJobs.length} completed field settlements
+            </div>
+          </div>
+
+          {/* Card 3: Pending Tasks */}
+          <div 
+            onClick={() => setCollectorTab('available')}
+            className="bg-white border border-[#e5e5e5] border-l-4 border-l-[#ca8a04] p-5 shadow-xs flex flex-col justify-between cursor-pointer hover:border-[#ca8a04] transition-all"
+          >
+            <div className="flex justify-between items-center text-[#595959]">
+              <span className="text-[10px] font-bold tracking-wider uppercase text-[#ca8a04]">
+                Pending Field Jobs
+              </span>
+              <Clock className="w-5 h-5 text-[#ca8a04]" />
+            </div>
+
+            <div className="my-3">
+              <span className="text-3xl font-black text-[#1a1c1c] font-mono">
+                {availableJobs.length}
+              </span>
+              <span className="text-xs font-bold text-[#595959] ml-2">TASKS</span>
+            </div>
+
+            <div className="text-[11px] text-[#ca8a04] font-semibold pt-2 border-t border-[#fefce8]">
+              Awaiting on-site collection
+            </div>
+          </div>
+        </div>
+
+        {/* Tab Navigation for Available vs Settled vs Lacking Jobs */}
+        <div className="bg-white border border-[#e5e5e5] p-2 shadow-xs flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
+          <div className="flex items-center gap-2 overflow-x-auto">
             <button
               onClick={() => setCollectorTab('available')}
-              className={`px-5 py-2.5 text-xs font-bold uppercase tracking-wider flex items-center gap-2 transition-all cursor-pointer ${
+              className={`px-4 py-2.5 text-xs font-bold uppercase tracking-wider flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
                 collectorTab === 'available'
                   ? 'bg-[#0891b2] text-white shadow-xs'
                   : 'text-[#595959] hover:text-[#1a1c1c] hover:bg-[#f2f2f2]'
@@ -530,7 +699,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
             <button
               onClick={() => setCollectorTab('settled')}
-              className={`px-5 py-2.5 text-xs font-bold uppercase tracking-wider flex items-center gap-2 transition-all cursor-pointer ${
+              className={`px-4 py-2.5 text-xs font-bold uppercase tracking-wider flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
                 collectorTab === 'settled'
                   ? 'bg-[#16a34a] text-white shadow-xs'
                   : 'text-[#595959] hover:text-[#1a1c1c] hover:bg-[#f2f2f2]'
@@ -539,10 +708,22 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <CheckCircle2 className="w-4 h-4" />
               <span>Settled Jobs ({settledJobs.length})</span>
             </button>
+
+            <button
+              onClick={() => setCollectorTab('lacking')}
+              className={`px-4 py-2.5 text-xs font-bold uppercase tracking-wider flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
+                collectorTab === 'lacking'
+                  ? 'bg-[#ba1a1a] text-white shadow-xs'
+                  : 'text-[#ba1a1a] hover:bg-[#fee2e2]'
+              }`}
+            >
+              <AlertCircle className="w-4 h-4 text-inherit" />
+              <span>Lacking Balance ({lackingJobs.length})</span>
+            </button>
           </div>
 
           <div className="hidden sm:block text-xs font-medium text-[#595959] pr-3">
-            Click any job card to inspect full details
+            Click any card to inspect or update received volume
           </div>
         </div>
 
@@ -557,69 +738,82 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {availableJobs.map((col) => (
-                  <div
-                    key={col.id}
-                    onClick={() => setSelectedJobDetails(col)}
-                    className="bg-white border border-[#e5e5e5] hover:border-[#0891b2] p-5 shadow-xs transition-all cursor-pointer flex flex-col justify-between group space-y-4"
-                  >
-                    <div>
-                      {/* Top Badges */}
-                      <div className="flex items-center justify-between border-b border-[#e5e5e5] pb-3">
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono font-bold text-sm text-[#0891b2] group-hover:underline">{col.id}</span>
-                          <span className="text-[10px] text-[#595959] font-mono">{col.time || 'Pending'}</span>
+                {availableJobs.map((col) => {
+                  const target = col.targetAmount || col.amount;
+                  const actual = col.actualAmountCollected !== undefined ? col.actualAmountCollected : 0;
+                  const shortage = col.shortageAmount || (actual > 0 ? Math.max(0, target - actual) : 0);
+
+                  return (
+                    <div
+                      key={col.id}
+                      onClick={() => setSelectedJobDetails(col)}
+                      className="bg-white border border-[#e5e5e5] hover:border-[#0891b2] p-5 shadow-xs transition-all cursor-pointer flex flex-col justify-between group space-y-4"
+                    >
+                      <div>
+                        {/* Top Badges */}
+                        <div className="flex items-center justify-between border-b border-[#e5e5e5] pb-3">
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono font-bold text-sm text-[#0891b2] group-hover:underline">{col.id}</span>
+                            <span className="text-[10px] text-[#595959] font-mono">{col.time || 'Pending'}</span>
+                          </div>
+                          <span className="px-2.5 py-0.5 bg-[#fef9c3] text-[#854d0e] border border-[#fef08a] text-[9px] font-black uppercase tracking-wider">
+                            PENDING ASSIGNMENT
+                          </span>
                         </div>
-                        <span className="px-2.5 py-0.5 bg-[#fef9c3] text-[#854d0e] border border-[#fef08a] text-[9px] font-black uppercase tracking-wider">
-                          PENDING ASSIGNMENT
+
+                        {/* Main Job Details */}
+                        <div className="mt-3 space-y-2">
+                          <h4 className="font-bold text-base text-[#1a1c1c] group-hover:text-[#0891b2] transition-colors">
+                            {col.clientName}
+                          </h4>
+
+                          <div className="text-2xl font-black text-[#1a1c1c] font-mono">
+                            {formatXAF(target)} <span className="text-xs text-[#595959] font-sans font-bold">FCFA</span>
+                          </div>
+
+                          {shortage > 0 && (
+                            <div className="p-2 bg-[#fee2e2] text-[#991b1b] border border-[#fca5a5] text-[11px] font-bold flex items-center justify-between">
+                              <span>Balance Lacking:</span>
+                              <span className="font-mono">{formatXAF(shortage)} FCFA</span>
+                            </div>
+                          )}
+
+                          <div className="space-y-1 pt-2 text-xs text-[#595959]">
+                            <div className="flex items-center gap-2">
+                              <MapPin className="w-3.5 h-3.5 text-[#0891b2] shrink-0" />
+                              <span className="truncate">{col.location || 'Douala Commercial Sector'}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Building className="w-3.5 h-3.5 text-[#0891b2] shrink-0" />
+                              <span className="truncate">Destination: {col.depositDestination || 'Cash Collection'}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Bottom Action Footer */}
+                      <div className="pt-3 border-t border-[#e5e5e5] flex items-center justify-between">
+                        <span className="text-xs font-bold text-[#0891b2] flex items-center gap-1 group-hover:underline">
+                          <Eye className="w-4 h-4" />
+                          <span>View Details & Photo</span>
                         </span>
-                      </div>
 
-                      {/* Main Job Details */}
-                      <div className="mt-3 space-y-2">
-                        <h4 className="font-bold text-base text-[#1a1c1c] group-hover:text-[#0891b2] transition-colors">
-                          {col.clientName}
-                        </h4>
-
-                        <div className="text-2xl font-black text-[#1a1c1c] font-mono">
-                          {formatXAF(col.amount)} <span className="text-xs text-[#595959] font-sans font-bold">FCFA</span>
-                        </div>
-
-                        <div className="space-y-1 pt-2 text-xs text-[#595959]">
-                          <div className="flex items-center gap-2">
-                            <MapPin className="w-3.5 h-3.5 text-[#0891b2] shrink-0" />
-                            <span className="truncate">{col.location || 'Douala Commercial Sector'}</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Building className="w-3.5 h-3.5 text-[#0891b2] shrink-0" />
-                            <span className="truncate">Destination: {col.depositDestination || 'Cash Collection'}</span>
-                          </div>
-                        </div>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (onOpenStatusUpdate) onOpenStatusUpdate(col);
+                            else onSelectCollection(col);
+                          }}
+                          className="px-3.5 py-1.5 bg-[#0891b2] hover:bg-[#0e7490] text-white text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shadow-xs"
+                        >
+                          <Check className="w-3.5 h-3.5 stroke-[3]" />
+                          <span>Complete Job</span>
+                        </button>
                       </div>
                     </div>
-
-                    {/* Bottom Action Footer */}
-                    <div className="pt-3 border-t border-[#e5e5e5] flex items-center justify-between">
-                      <span className="text-xs font-bold text-[#0891b2] flex items-center gap-1 group-hover:underline">
-                        <Eye className="w-4 h-4" />
-                        <span>View Details & Photo</span>
-                      </span>
-
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (onOpenStatusUpdate) onOpenStatusUpdate(col);
-                          else onSelectCollection(col);
-                        }}
-                        className="px-3.5 py-1.5 bg-[#0891b2] hover:bg-[#0e7490] text-white text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shadow-xs"
-                      >
-                        <Check className="w-3.5 h-3.5 stroke-[3]" />
-                        <span>Complete Job</span>
-                      </button>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -634,56 +828,184 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {settledJobs.map((col) => (
-                  <div
-                    key={col.id}
-                    onClick={() => setSelectedJobDetails(col)}
-                    className="bg-white border border-[#e5e5e5] hover:border-[#16a34a] p-5 shadow-xs transition-all cursor-pointer flex flex-col justify-between group space-y-4"
-                  >
-                    <div>
-                      {/* Top Badges */}
-                      <div className="flex items-center justify-between border-b border-[#e5e5e5] pb-3">
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono font-bold text-sm text-[#16a34a] group-hover:underline">{col.id}</span>
-                          <span className="text-[10px] text-[#595959] font-mono">{new Date(col.timestamp || Date.now()).toLocaleDateString()} {col.time}</span>
+                {settledJobs.map((col) => {
+                  const target = col.targetAmount || col.amount;
+                  const actual = col.actualAmountCollected !== undefined ? col.actualAmountCollected : col.amount;
+                  const shortage = col.shortageAmount || Math.max(0, target - actual);
+
+                  return (
+                    <div
+                      key={col.id}
+                      onClick={() => setSelectedJobDetails(col)}
+                      className="bg-white border border-[#e5e5e5] hover:border-[#16a34a] p-5 shadow-xs transition-all cursor-pointer flex flex-col justify-between group space-y-4"
+                    >
+                      <div>
+                        {/* Top Badges */}
+                        <div className="flex items-center justify-between border-b border-[#e5e5e5] pb-3">
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono font-bold text-sm text-[#16a34a] group-hover:underline">{col.id}</span>
+                            <span className="text-[10px] text-[#595959] font-mono">{new Date(col.timestamp || Date.now()).toLocaleDateString()} {col.time}</span>
+                          </div>
+                          <span className="px-2 py-0.5 bg-[#dcfce7] text-[#166534] border border-[#86efac] text-[9px] font-black uppercase tracking-wider">
+                            SETTLED
+                          </span>
                         </div>
-                        <span className="px-2 py-0.5 bg-[#dcfce7] text-[#166534] border border-[#86efac] text-[9px] font-black uppercase tracking-wider">
-                          SETTLED
+
+                        {/* Main Details */}
+                        <div className="mt-3 space-y-2">
+                          <h4 className="font-bold text-base text-[#1a1c1c] group-hover:text-[#16a34a] transition-colors">
+                            {col.clientName}
+                          </h4>
+
+                          <div className="text-2xl font-black text-[#1a1c1c] font-mono">
+                            {formatXAF(actual)} <span className="text-xs text-[#595959] font-sans font-bold">FCFA</span>
+                          </div>
+
+                          {shortage > 0 && (
+                            <div className="p-2 bg-[#fee2e2] text-[#991b1b] border border-[#fca5a5] text-[11px] font-bold flex items-center justify-between">
+                              <span>Shortfall Balance:</span>
+                              <span className="font-mono">{formatXAF(shortage)} FCFA</span>
+                            </div>
+                          )}
+
+                          <div className="space-y-1 pt-2 text-xs text-[#595959]">
+                            <div className="flex items-center gap-2">
+                              <MapPin className="w-3.5 h-3.5 text-[#16a34a] shrink-0" />
+                              <span className="truncate">{col.location || 'Douala Commercial Sector'}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Building className="w-3.5 h-3.5 text-[#16a34a] shrink-0" />
+                              <span className="truncate">Destination: {col.depositDestination || 'Cash Collection'}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="pt-3 border-t border-[#e5e5e5] flex items-center justify-between">
+                        <span className="text-xs font-bold text-[#16a34a] flex items-center gap-1 group-hover:underline">
+                          <Eye className="w-4 h-4" />
+                          <span>View Full Record & Photo</span>
                         </span>
-                      </div>
-
-                      {/* Main Details */}
-                      <div className="mt-3 space-y-2">
-                        <h4 className="font-bold text-base text-[#1a1c1c] group-hover:text-[#16a34a] transition-colors">
-                          {col.clientName}
-                        </h4>
-
-                        <div className="text-2xl font-black text-[#1a1c1c] font-mono">
-                          {formatXAF(col.amount)} <span className="text-xs text-[#595959] font-sans font-bold">FCFA</span>
-                        </div>
-
-                        <div className="space-y-1 pt-2 text-xs text-[#595959]">
-                          <div className="flex items-center gap-2">
-                            <MapPin className="w-3.5 h-3.5 text-[#16a34a] shrink-0" />
-                            <span className="truncate">{col.location || 'Douala Commercial Sector'}</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Building className="w-3.5 h-3.5 text-[#16a34a] shrink-0" />
-                            <span className="truncate">Destination: {col.depositDestination || 'Cash Collection'}</span>
-                          </div>
-                        </div>
+                        <ChevronRight className="w-4 h-4 text-[#16a34a]" />
                       </div>
                     </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
 
-                    <div className="pt-3 border-t border-[#e5e5e5] flex items-center justify-between">
-                      <span className="text-xs font-bold text-[#16a34a] flex items-center gap-1 group-hover:underline">
-                        <Eye className="w-4 h-4" />
-                        <span>View Full Record & Photo</span>
-                      </span>
-                      <ChevronRight className="w-4 h-4 text-[#16a34a]" />
+        {/* Lacking Balance Jobs Card Grid (The dedicated shortfall tab) */}
+        {collectorTab === 'lacking' && (
+          <div className="space-y-4">
+            <div className="p-4 bg-[#fef2f2] border border-[#fca5a5] text-[#991b1b] flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+              <div>
+                <strong className="text-sm block">Transactions with Outstanding Shortfall / Lacking Balance</strong>
+                <span>These collections were partially paid by the client. You can update how much was received when the remainder is handed over.</span>
+              </div>
+              <div className="font-mono text-base font-black px-3 py-1 bg-white border border-[#fca5a5] shrink-0">
+                Total Shortfall: {formatXAF(totalLackingAmount)} FCFA
+              </div>
+            </div>
+
+            {lackingJobs.length === 0 ? (
+              <div className="bg-white border border-[#e5e5e5] p-12 text-center text-[#595959] font-bold shadow-xs">
+                <CheckCircle2 className="w-10 h-10 text-[#16a34a] mx-auto mb-3" />
+                <p className="text-base text-[#1a1c1c]">No lacking balance or shortfall transactions!</p>
+                <p className="text-xs text-[#595959] font-normal mt-1">All collections match 100% of their target amounts.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {lackingJobs.map((col) => {
+                  const target = col.targetAmount || col.amount;
+                  const actual = col.actualAmountCollected !== undefined 
+                    ? col.actualAmountCollected 
+                    : (col.status === 'COMPLETE' ? col.amount : 0);
+                  const shortage = col.shortageAmount || Math.max(0, target - actual);
+
+                  return (
+                    <div
+                      key={col.id}
+                      onClick={() => setSelectedJobDetails(col)}
+                      className="bg-white border-2 border-[#fca5a5] hover:border-[#ba1a1a] p-5 shadow-xs transition-all cursor-pointer flex flex-col justify-between group space-y-4"
+                    >
+                      <div>
+                        {/* Top Badges */}
+                        <div className="flex items-center justify-between border-b border-[#e5e5e5] pb-3">
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono font-bold text-sm text-[#ba1a1a] group-hover:underline">{col.id}</span>
+                            <span className="text-[10px] text-[#595959] font-mono">{col.time}</span>
+                          </div>
+                          <span className="px-2 py-0.5 bg-[#fee2e2] text-[#991b1b] border border-[#fca5a5] text-[9px] font-black uppercase tracking-wider flex items-center gap-1">
+                            <AlertCircle className="w-3 h-3 text-[#ba1a1a]" />
+                            <span>DEFICIT SHORTFALL</span>
+                          </span>
+                        </div>
+
+                        {/* Client & Financial Metrics Breakdown */}
+                        <div className="mt-3 space-y-3">
+                          <h4 className="font-bold text-base text-[#1a1c1c] group-hover:text-[#ba1a1a] transition-colors">
+                            {col.clientName}
+                          </h4>
+
+                          <div className="p-3 bg-[#f8fafc] border border-[#e2e8f0] grid grid-cols-3 gap-2 text-center">
+                            <div>
+                              <span className="text-[10px] text-[#595959] uppercase font-bold block">TARGET</span>
+                              <span className="text-xs font-mono font-bold text-[#1a1c1c]">{formatXAF(target)}</span>
+                            </div>
+                            <div className="border-x border-[#e2e8f0]">
+                              <span className="text-[10px] text-[#0891b2] uppercase font-bold block">RECEIVED</span>
+                              <span className="text-xs font-mono font-bold text-[#0891b2]">{formatXAF(actual)}</span>
+                            </div>
+                            <div>
+                              <span className="text-[10px] text-[#ba1a1a] uppercase font-bold block">LACKING</span>
+                              <span className="text-xs font-mono font-extrabold text-[#ba1a1a]">{formatXAF(shortage)}</span>
+                            </div>
+                          </div>
+
+                          {col.summaryNote && (
+                            <p className="text-[11px] text-[#595959] italic bg-[#f9f9f9] p-2 border border-[#e5e5e5]">
+                              Note: "{col.summaryNote}"
+                            </p>
+                          )}
+
+                          <div className="space-y-1 text-xs text-[#595959]">
+                            <div className="flex items-center gap-2">
+                              <MapPin className="w-3.5 h-3.5 text-[#ba1a1a] shrink-0" />
+                              <span className="truncate">{col.location || 'Douala Commercial Sector'}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Building className="w-3.5 h-3.5 text-[#ba1a1a] shrink-0" />
+                              <span className="truncate">Destination: {col.depositDestination || 'Cash Collection'}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Action Footer */}
+                      <div className="pt-3 border-t border-[#e5e5e5] flex items-center justify-between">
+                        <span className="text-xs font-bold text-[#0891b2] flex items-center gap-1 group-hover:underline">
+                          <Eye className="w-4 h-4" />
+                          <span>View Detail</span>
+                        </span>
+
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (onOpenStatusUpdate) onOpenStatusUpdate(col);
+                            else onSelectCollection(col);
+                          }}
+                          className="px-3.5 py-1.5 bg-[#ba1a1a] hover:bg-[#93000a] text-white text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shadow-xs transition-colors"
+                        >
+                          <Check className="w-3.5 h-3.5 stroke-[3]" />
+                          <span>Update Received Amount</span>
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -733,7 +1055,28 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       </div>
 
       {/* CEO Executive Summary Bento Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Card 1: Balance Lacking / Company Shortfall */}
+        <div className="bg-white border border-[#e5e5e5] border-l-4 border-l-[#ba1a1a] p-5 shadow-xs flex flex-col justify-between">
+          <div className="flex justify-between items-center text-[#595959]">
+            <span className="text-[10px] font-bold tracking-wider uppercase text-[#ba1a1a]">
+              Total Balance Lacking
+            </span>
+            <AlertCircle className="w-5 h-5 text-[#ba1a1a]" />
+          </div>
+
+          <div className="my-3">
+            <span className="text-3xl font-black text-[#ba1a1a] font-mono">
+              {formatXAF(totalCompanyLackingAmount)}
+            </span>
+            <span className="text-sm font-bold text-[#ba1a1a] ml-2">FCFA</span>
+          </div>
+
+          <div className="text-[11px] text-[#ba1a1a] font-semibold">
+            Company-wide collection deficit
+          </div>
+        </div>
+
         <div className="bg-white border border-[#e5e5e5] border-l-4 border-l-[#0891b2] p-5 shadow-xs flex flex-col justify-between">
           <div className="flex justify-between items-center text-[#595959]">
             <span className="text-[10px] font-bold tracking-wider uppercase">

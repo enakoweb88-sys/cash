@@ -25,6 +25,14 @@ export async function fetchRemoteCollections(): Promise<Collection[]> {
         }
       } catch (e) {}
 
+      const targetAmount = descParsed.targetAmount || Number(item.amountCollected || 0);
+      const actualAmount = descParsed.actualAmountCollected !== undefined 
+        ? Number(descParsed.actualAmountCollected) 
+        : (item.status === 'COMPLETE' ? Number(item.amountCollected || 0) : 0);
+      const shortageAmount = descParsed.shortageAmount !== undefined
+        ? Number(descParsed.shortageAmount)
+        : Math.max(0, targetAmount - actualAmount);
+
       return {
         id: item.id || `COL-${Date.now()}`,
         clientId: item.clientId || 'C-CLIENT',
@@ -37,8 +45,10 @@ export async function fetchRemoteCollections(): Promise<Collection[]> {
         depositDestination: descParsed.depositDestination,
         location: item.location,
         notes: descParsed.notes || item.description,
-        shortageAmount: descParsed.shortageAmount || 0,
+        shortageAmount,
         extraAmount: descParsed.extraAmount || 0,
+        targetAmount,
+        actualAmountCollected: actualAmount,
         summaryNote: descParsed.summaryNote,
         receiptUrl: item.receiptUrl || descParsed.receiptUrl,
         receiptName: item.receiptName || descParsed.receiptName,
@@ -59,6 +69,8 @@ export async function createRemoteCollection(collection: Collection): Promise<bo
       type: collection.type || 'COLLECTING',
       depositDestination: collection.depositDestination,
       notes: collection.notes,
+      targetAmount: collection.targetAmount || collection.amount,
+      actualAmountCollected: collection.actualAmountCollected !== undefined ? collection.actualAmountCollected : (collection.status === 'COMPLETE' ? collection.amount : 0),
       shortageAmount: collection.shortageAmount || 0,
       extraAmount: collection.extraAmount || 0,
       summaryNote: collection.summaryNote,
@@ -74,7 +86,7 @@ export async function createRemoteCollection(collection: Collection): Promise<bo
       clientName: collection.clientName,
       location: collection.location || 'Douala Field Sector',
       amountCollected: Number(collection.amount),
-      outstandingBalance: 0,
+      outstandingBalance: collection.shortageAmount || 0,
       status: collection.status || 'PENDING',
       description: JSON.stringify(descriptionObj),
       receiptUrl: collection.receiptUrl,
@@ -95,18 +107,54 @@ export async function createRemoteCollection(collection: Collection): Promise<bo
 
 export async function updateRemoteCollectionStatus(
   collectionId: string,
-  status: TransactionStatus
+  status: TransactionStatus,
+  metadata?: {
+    actualAmountCollected?: number;
+    shortageAmount?: number;
+    extraAmount?: number;
+    summaryNote?: string;
+  }
 ): Promise<boolean> {
   try {
     const res = await fetch(`${API_BASE_URL}/cash-collections/${collectionId}/status`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-      body: JSON.stringify({ status }),
+      body: JSON.stringify({ status, ...metadata }),
     });
 
     return res.ok;
   } catch (error) {
     console.warn('Backend API update status notice:', error);
+    return false;
+  }
+}
+
+// ─── COLLECTORS / USERS API (SUPABASE BACKEND) ───
+
+export async function fetchRemoteCollectors(): Promise<any[]> {
+  try {
+    const res = await fetch(`${API_BASE_URL}/cash-collections/collectors`, {
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+    });
+    if (!res.ok) return [];
+    const collectors = await res.json();
+    return Array.isArray(collectors) ? collectors : [];
+  } catch (error) {
+    console.warn('Backend collectors fetch notice:', error);
+    return [];
+  }
+}
+
+export async function createRemoteCollector(collectorData: any): Promise<boolean> {
+  try {
+    const res = await fetch(`${API_BASE_URL}/cash-collections/collectors`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+      body: JSON.stringify(collectorData),
+    });
+    return res.ok;
+  } catch (error) {
+    console.warn('Backend collector create notice:', error);
     return false;
   }
 }

@@ -34,7 +34,9 @@ import {
   getInitialKycApprovedClients,
   createRemoteTransaction,
   settleRemoteTransaction,
-  sendCollectionNotificationEmail
+  sendCollectionNotificationEmail,
+  fetchRemoteCollectors,
+  createRemoteCollector
 } from './api/cashApi';
 import { generateReceiptPdfBase64 } from './utils/exportUtils';
 import { CheckCircle2, AlertCircle, RefreshCw } from 'lucide-react';
@@ -190,6 +192,19 @@ export default function App() {
         setCollections((prev) => {
           const existingIds = new Set(prev.map((c) => c.id));
           const newFromRemote = remoteData.filter((r) => !existingIds.has(r.id));
+          return [...newFromRemote, ...prev];
+        });
+      }
+    });
+  }, []);
+
+  // Fetch remote collectors on load from backend database (Supabase)
+  useEffect(() => {
+    fetchRemoteCollectors().then((remoteCollectors) => {
+      if (remoteCollectors && remoteCollectors.length > 0) {
+        setAccounts((prev) => {
+          const existingEmails = new Set(prev.map((a) => a.email.toLowerCase()));
+          const newFromRemote = remoteCollectors.filter((r: any) => !existingEmails.has(r.email.toLowerCase()));
           return [...newFromRemote, ...prev];
         });
       }
@@ -369,6 +384,8 @@ export default function App() {
     };
 
     setAccounts((prev) => [newAccount, ...prev]);
+    // Persist to Supabase DB
+    createRemoteCollector(newAccount).catch((err) => console.warn('Collector persistence note:', err));
 
     const newUser: CollectorUser = {
       id: newId,
@@ -485,7 +502,9 @@ export default function App() {
       createdAt: new Date().toISOString(),
     };
     setAccounts((prev) => [newAccount, ...prev]);
-    showToast(`Collector ${newAccount.fullName} (${newAccount.terminalId}) registered!`, 'success');
+    // Persist collector to Supabase DB
+    createRemoteCollector(newAccount).catch((err) => console.warn('Collector persistence note:', err));
+    showToast(`Collector ${newAccount.fullName} (${newAccount.terminalId}) registered & synced to Supabase!`, 'success');
   };
 
   // Add new client to database
@@ -500,29 +519,41 @@ export default function App() {
     showToast(`Client ${client.name} (#${newId}) registered in terminal!`, 'success');
   };
 
-  // Handle status update and settlement notes
+  // Handle status update, received amounts, and settlement notes
   const handleSaveStatus = (
     collectionId: string, 
     newStatus: TransactionStatus, 
     shortage: number, 
     extra: number, 
-    summaryNote: string
+    summaryNote: string,
+    actualAmountCollected?: number,
+    targetAmount?: number
   ) => {
     // Locate target collection synchronously from state
     const existingCol = collections.find((c) => c.id === collectionId);
+    const tgt = targetAmount || existingCol?.targetAmount || existingCol?.amount || 0;
+    const act = actualAmountCollected !== undefined 
+      ? actualAmountCollected 
+      : (existingCol?.actualAmountCollected !== undefined ? existingCol.actualAmountCollected : (newStatus === 'COMPLETE' ? (existingCol?.amount || tgt) : 0));
+
     const updatedCol: Collection = existingCol
       ? {
           ...existingCol,
           status: newStatus,
+          targetAmount: tgt,
+          actualAmountCollected: act,
           shortageAmount: shortage,
           extraAmount: extra,
           summaryNote: summaryNote,
+          amount: act > 0 ? act : tgt,
         }
       : {
           id: collectionId,
           clientId: 'C-CLIENT',
           clientName: 'Client',
-          amount: 0,
+          amount: act > 0 ? act : tgt,
+          targetAmount: tgt,
+          actualAmountCollected: act,
           time: 'Now',
           status: newStatus,
           shortageAmount: shortage,
@@ -536,9 +567,12 @@ export default function App() {
           return {
             ...col,
             status: newStatus,
+            targetAmount: tgt,
+            actualAmountCollected: act,
             shortageAmount: shortage,
             extraAmount: extra,
             summaryNote: summaryNote,
+            amount: act > 0 ? act : tgt,
           };
         }
         return col;
@@ -546,7 +580,12 @@ export default function App() {
     );
 
     // Send update to central backend database
-    updateRemoteCollectionStatus(collectionId, newStatus);
+    updateRemoteCollectionStatus(collectionId, newStatus, {
+      actualAmountCollected: act,
+      shortageAmount: shortage,
+      extraAmount: extra,
+      summaryNote: summaryNote,
+    });
 
     // Auto-sync status change with FX Transaction!
     if (newStatus === 'COMPLETE') {

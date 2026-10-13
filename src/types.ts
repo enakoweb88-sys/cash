@@ -51,6 +51,8 @@ export interface Collection {
   receiptName?: string;
   shortageAmount?: number;
   extraAmount?: number;
+  targetAmount?: number;
+  actualAmountCollected?: number;
   summaryNote?: string;
   assignedCollectorId?: string;
   assignedCollectorName?: string;
