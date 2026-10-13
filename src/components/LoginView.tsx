@@ -1,14 +1,14 @@
-import React, { useState } from 'react';
-import { ShieldCheck, AlertCircle, Eye, EyeOff, Building, Phone, User, Mail, Lock, Key } from 'lucide-react';
+import { ShieldCheck, AlertCircle, Eye, EyeOff, Building, Phone, User, Mail, Lock, Key, FileText } from 'lucide-react';
 import { CollectorUser } from '../types';
 
 interface LoginViewProps {
   onLogin: (credentials: { emailOrPhone: string; password?: string; role?: string; remember: boolean }) => { success: boolean; error?: string };
   onSignUp: (userData: { firstName: string; lastName: string; email: string; phone?: string; branch: string; role: string; password?: string }) => { success: boolean; error?: string };
   currentUser: CollectorUser;
+  onOpenClientKyc?: () => void;
 }
 
-export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onSignUp, currentUser }) => {
+export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onSignUp, currentUser, onOpenClientKyc }) => {
   // Login Role: CEO / Executive Manager vs Field Cash Collector / Senior Cash Officer
   const [loginRole, setLoginRole] = useState<'CEO' | 'SENIOR' | 'COLLECTOR'>('CEO');
 
@@ -241,6 +241,19 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onSignUp, current
                 <span>Sign In to Terminal</span>
               )}
             </button>
+
+            {onOpenClientKyc && (
+              <div className="pt-2 text-center">
+                <button
+                  type="button"
+                  onClick={onOpenClientKyc}
+                  className="text-xs font-bold text-[#001f5b] hover:text-[#0891b2] hover:underline inline-flex items-center gap-1.5 transition-colors cursor-pointer py-1"
+                >
+                  <FileText className="w-3.5 h-3.5" />
+                  <span>Looking to submit Client KYC? Open Public Portal</span>
+                </button>
+              </div>
+            )}
           </form>
 
           {/* Footer Guarantee */}

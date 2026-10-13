@@ -36,7 +36,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
   mobileOpen = false,
   onCloseMobile,
 }) => {
-  const isCeoOrManager = user?.role === 'CEO / Senior Manager' || user?.email === 'ceo@enako.com' || user?.role === 'CEO' || user?.role === 'Senior Manager' || user?.role === 'Branch Operations Lead';
+  const isCeoOrManager = 
+    user?.role === 'CEO / Senior Manager' || 
+    user?.email === 'ceo@enako.com' || 
+    user?.role === 'CEO' || 
+    user?.role === 'CEO / Executive Manager' ||
+    user?.role === 'Senior Manager' || 
+    user?.role === 'Senior Cash Officer' ||
+    user?.role === 'Branch Operations Lead';
 
   const allNavItems = [
     {
@@ -75,16 +82,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
       icon: ShieldCheck,
     },
     {
+      id: 'client-kyc' as ViewType,
+      label: 'Client KYC Portal',
+      icon: FileText,
+    },
+    {
       id: 'history' as ViewType,
       label: 'Collection History',
       icon: History,
     },
   ];
 
-  // Collectors only see Dashboard, New Collection, and Collection History
+  // Collectors see Dashboard, New Collection, Client KYC Portal, and Collection History
   const navItems = isCeoOrManager 
     ? allNavItems 
-    : allNavItems.filter((item) => ['dashboard', 'new-collection', 'history'].includes(item.id));
+    : allNavItems.filter((item) => ['dashboard', 'new-collection', 'client-kyc', 'history'].includes(item.id));
 
   const sidebarContent = (
     <div className="flex flex-col h-full bg-[#2f3131] text-[#ffffff] select-none border-r border-[#e5e5e5]/10">

@@ -19,6 +19,7 @@ import { ExchangeRatesView } from './components/ExchangeRatesView';
 import { KycView } from './components/KycView';
 import { CollectorsView } from './components/CollectorsView';
 import { LoginView } from './components/LoginView';
+import { ClientKycPortal } from './components/ClientKycPortal';
 import { ReceiptModal } from './components/ReceiptModal';
 import { GenerateReportModal } from './components/GenerateReportModal';
 import { SettingsModal } from './components/SettingsModal';
@@ -36,7 +37,8 @@ import {
   settleRemoteTransaction,
   sendCollectionNotificationEmail,
   fetchRemoteCollectors,
-  createRemoteCollector
+  createRemoteCollector,
+  ensureAdminToken
 } from './api/cashApi';
 import { generateReceiptPdfBase64 } from './utils/exportUtils';
 import { CheckCircle2, AlertCircle, RefreshCw } from 'lucide-react';
@@ -51,18 +53,30 @@ const VALID_VIEWS: ViewType[] = [
   'create-transaction',
   'update-rates',
   'kyc',
+  'client-kyc',
 ];
 
 const getInitialView = (): ViewType => {
   if (typeof window !== 'undefined') {
+    // If accessing kyc.enakootc.com domain or kyc subdomain, default directly to Client KYC Portal
+    const host = window.location.hostname.toLowerCase();
+    if (host.startsWith('kyc.') || host.includes('kyc.')) {
+      return 'client-kyc';
+    }
     const hash = window.location.hash.replace(/^#\/?/, '').trim() as ViewType;
+    if (hash === 'kyc-portal' || hash === 'portal') {
+      return 'client-kyc';
+    }
     if (VALID_VIEWS.includes(hash)) {
       return hash;
     }
     const urlParams = new URLSearchParams(window.location.search);
-    const viewParam = (urlParams.get('view') || urlParams.get('tab')) as ViewType;
+    const viewParam = (urlParams.get('view') || urlParams.get('tab') || urlParams.get('portal')) as ViewType;
     if (viewParam && VALID_VIEWS.includes(viewParam)) {
       return viewParam;
+    }
+    if (urlParams.get('kyc') !== null || urlParams.get('portal') === 'kyc') {
+      return 'client-kyc';
     }
     const saved = localStorage.getItem('enako_cash_current_view') as ViewType;
     if (saved && VALID_VIEWS.includes(saved)) {
@@ -655,13 +669,22 @@ export default function App() {
     showToast('Terminal factory reset complete.', 'success');
   };
 
-  // When not logged in, render the Login Screen (Image 7.png)
+  // When not logged in, render the Login Screen or Client KYC Portal
   if (!user.isLoggedIn) {
+    if (currentView === 'client-kyc') {
+      return (
+        <ClientKycPortal
+          onBackToTerminal={() => setCurrentView('dashboard')}
+          onShowToast={showToast}
+        />
+      );
+    }
     return (
       <LoginView
         currentUser={user}
         onLogin={handleLogin}
         onSignUp={handleSignUp}
+        onOpenClientKyc={() => setCurrentView('client-kyc')}
       />
     );
   }
@@ -817,6 +840,14 @@ export default function App() {
               user={user}
               onShowToast={showToast}
               onAutoCreateClient={handleAutoCreateClientFromKyc}
+              onOpenClientKycPortal={() => setCurrentView('client-kyc')}
+            />
+          )}
+
+          {currentView === 'client-kyc' && (
+            <ClientKycPortal
+              onBackToTerminal={() => setCurrentView('dashboard')}
+              onShowToast={showToast}
             />
           )}
         </main>

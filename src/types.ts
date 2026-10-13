@@ -1,4 +1,4 @@
-export type ViewType = 'dashboard' | 'new-collection' | 'clients' | 'history' | 'transactions' | 'create-transaction' | 'update-rates' | 'kyc' | 'collectors';
+export type ViewType = 'dashboard' | 'new-collection' | 'clients' | 'history' | 'transactions' | 'create-transaction' | 'update-rates' | 'kyc' | 'collectors' | 'client-kyc';
 
 export type TransactionStatus = 'COMPLETE' | 'PENDING' | 'CANCELLED';
 

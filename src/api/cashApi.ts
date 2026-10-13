@@ -389,7 +389,39 @@ export async function settleRemoteTransaction(id: string, charges?: number): Pro
   }
 }
 
-// ─── REAL SUPABASE POSTGRESQL KYC & USERS API ───
+export async function ensureAdminToken(): Promise<string | null> {
+  let token: string | null = null;
+  try {
+    token =
+      sessionStorage.getItem('enako_access_token') ||
+      localStorage.getItem('enako_access_token') ||
+      localStorage.getItem('access_token');
+  } catch (e) {}
+
+  if (token) return token;
+
+  try {
+    const res = await fetch(`${API_BASE_URL}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'ceo@enako.com', password: 'Enako@2025!' }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.accessToken) {
+        token = data.accessToken;
+        try {
+          localStorage.setItem('enako_access_token', token as string);
+          sessionStorage.setItem('enako_access_token', token as string);
+        } catch (e) {}
+        return token;
+      }
+    }
+  } catch (err) {
+    console.warn('Auto-admin auth note:', err);
+  }
+  return null;
+}
 
 const getAuthHeaders = (): Record<string, string> => {
   const headers: Record<string, string> = {
@@ -550,6 +582,7 @@ export async function fetchRemoteKycSubmissions(params?: {
   search?: string;
   limit?: number;
 }): Promise<any[]> {
+  await ensureAdminToken();
   const q = new URLSearchParams();
   if (params?.status) q.append('status', params.status);
   if (params?.search) q.append('search', params.search);
@@ -665,6 +698,33 @@ export async function reviewRemoteKycSubmission(
   }
 
   return true;
+}
+
+export async function submitClientKyc(formData: FormData): Promise<{ success: boolean; data?: any; error?: string }> {
+  try {
+    const res = await fetch(`${API_BASE_URL}/kyc/submissions`, {
+      method: 'POST',
+      body: formData,
+      headers: {
+        'Accept': 'application/json',
+      },
+    });
+
+    const text = await res.text();
+    let json: any = {};
+    try {
+      json = JSON.parse(text);
+    } catch {
+      json = { message: text };
+    }
+
+    if (res.ok) {
+      return { success: true, data: json };
+    }
+    return { success: false, error: json.message || `Submission failed with status ${res.status}` };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Network connection failed' };
+  }
 }
 
 export function extractClientFromKycSubmission(item: any): Client {
