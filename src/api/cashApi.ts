@@ -181,88 +181,8 @@ export function saveLocalTransaction(tx: any) {
   } catch (e) {}
 }
 
-const REAL_DATABASE_TRANSACTION_RECORDS: any[] = [
-  {
-    id: "cmtmnkxy4000ii0a5m8prkfwt",
-    reference: "ENK-1788508161941",
-    entity: "Rich bought usdt",
-    type: "Receive",
-    channel: "MTN",
-    currency: "USDT",
-    amount: 9186,
-    amountInXaf: 5530000,
-    exchangeRate: 602,
-    buyingRate: 602,
-    sellingRate: 615,
-    status: "SETTLED",
-    description: "Ref: ENK-1788508161941 | Rich bought usdt",
-    createdAt: "2026-09-04T07:49:21.942Z",
-  },
-  {
-    id: "cmtmnhb55000gi0a5tz9o3pji",
-    reference: "ENK-1788507992062",
-    entity: "Alain bought USD",
-    type: "Receive",
-    channel: "MTN",
-    currency: "USD",
-    amount: 15828,
-    amountInXaf: 9544476,
-    exchangeRate: 603,
-    buyingRate: 603,
-    sellingRate: 615,
-    status: "SETTLED",
-    description: "Ref: ENK-1788507992062 | Alain bought USD",
-    createdAt: "2026-09-04T07:46:32.063Z",
-  },
-  {
-    id: "cmtmncxvf000ei0a5ez0miu55",
-    reference: "ENK-1788507788596",
-    entity: "chinese bought usdt",
-    type: "Receive",
-    channel: "MTN",
-    currency: "USDT",
-    amount: 166666,
-    amountInXaf: 100000000,
-    exchangeRate: 600,
-    buyingRate: 600,
-    sellingRate: 615,
-    status: "SETTLED",
-    description: "Ref: ENK-1788507788596 | chinese bought usdt (100M XAF)",
-    createdAt: "2026-09-04T07:43:08.597Z",
-  },
-  {
-    id: "cmtmnbs59000ci0a53l7aosuv",
-    reference: "ENK-1788507734517",
-    entity: "Choby bought usdt",
-    type: "Receive",
-    channel: "MTN",
-    currency: "USDT",
-    amount: 15766,
-    amountInXaf: 9460000,
-    exchangeRate: 600,
-    buyingRate: 600,
-    sellingRate: 615,
-    status: "SETTLED",
-    description: "Ref: ENK-1788507734517 | Choby bought usdt",
-    createdAt: "2026-09-04T07:42:14.518Z",
-  },
-  {
-    id: "cmtmnamzz000ai0a5zl8aifrk",
-    reference: "ENK-1788507680838",
-    entity: "Choby bought usdt",
-    type: "Receive",
-    channel: "MTN",
-    currency: "USDT",
-    amount: 8305,
-    amountInXaf: 5000000,
-    exchangeRate: 602,
-    buyingRate: 602,
-    sellingRate: 615,
-    status: "SETTLED",
-    description: "Ref: ENK-1788507680838 | Choby bought usdt",
-    createdAt: "2026-09-04T07:41:20.839Z",
-  },
-];
+const REAL_DATABASE_TRANSACTION_RECORDS: any[] = [];
+
 
 export async function fetchRemoteTransactions(params?: {
   search?: string;
@@ -439,143 +359,9 @@ const getAuthHeaders = (): Record<string, string> => {
   return headers;
 };
 
-// Exact Real KYC Submissions and Registered Users from Supabase PostgreSQL Database
-const REAL_DATABASE_KYC_RECORDS: any[] = [
-  {
-    id: "cmuinutmp0006u9xp5hq5xu01",
-    applicantType: "INDIVIDUAL",
-    applicantName: "Raphael Michael",
-    email: "raphaelmichael90@gmail.com",
-    phone: "07037278525",
-    status: "APPROVED",
-    rejectionReason: "",
-    createdAt: "2026-09-26T17:25:40.181Z",
-    payload: {
-      gender: "Male",
-      idType: "Passport",
-      bankName: "Zenith bank",
-      fullName: "Raphael Michael",
-      idNumber: "A13073812",
-      agreement: "true",
-      signature: "Raphael Michael",
-      expiryDate: "2028-05-04",
-      occupation: "Crypto trader",
-      accountName: "Raphael Michael",
-      dateOfBirth: "1993-01-29",
-      nationality: "Nigeria",
-      phoneNumber: "07037278525",
-      emailAddress: "raphaelmichael90@gmail.com",
-      employerName: "Nil",
-      accountNumber: "1007652557",
-      sourceOfFunds: "Trading",
-      declarationDate: "2026-09-26",
-      residentialAddress: "Behind Rock Garden Hotel Lokoja"
-    },
-    documents: [
-      {
-        id: "cmuinutmp0007u9xpyhz4t9da",
-        documentType: "Passport ID",
-        fileName: "SAVE_20260708_163611.jpg",
-        fileUrl: "https://xvsrcxqahvothpxchxki.supabase.co/storage/v1/object/public/kyc-documents/1790443537113-698312428.jpg",
-        mimeType: "image/jpeg"
-      },
-      {
-        id: "cmuinutmp0008u9xpvm29y5h7",
-        documentType: "Proof of Address",
-        fileName: "IMG-20260914-WA0156(1).jpg",
-        fileUrl: "https://xvsrcxqahvothpxchxki.supabase.co/storage/v1/object/public/kyc-documents/1790443538827-871609216.jpg",
-        mimeType: "image/jpeg"
-      },
-      {
-        id: "cmuinutmp0009u9xp24wy2zxi",
-        documentType: "Selfie Verification",
-        fileName: "IMG_3687.JPG",
-        fileUrl: "https://xvsrcxqahvothpxchxki.supabase.co/storage/v1/object/public/kyc-documents/1790443539036-4619053.JPG",
-        mimeType: "image/jpeg"
-      }
-    ]
-  },
-  {
-    id: "cmumsew6o0006qcb39f14z84g",
-    applicantType: "INDIVIDUAL",
-    applicantName: "Enako Executive",
-    email: "enakoweb88@gmail.com",
-    phone: "+237690000000",
-    status: "REJECTED",
-    rejectionReason: "Requires updated registration document",
-    createdAt: "2026-09-29T14:44:20.130Z",
-    payload: {
-      note: "Live production Resend email verification",
-      email: "enakoweb88@gmail.com",
-      phone: "+237690000000"
-    },
-    documents: []
-  },
-  {
-    id: "cmtlphrdw00114q274mf0ruky",
-    applicantType: "EMPLOYEE",
-    applicantName: "Nounga Joseph Youmi",
-    email: "enakoweb88@gmail.com",
-    phone: "+237690000004",
-    status: "PENDING",
-    createdAt: "2026-09-03T15:55:06.596Z",
-    payload: {
-      fullName: "Nounga Joseph Youmi",
-      email: "enakoweb88@gmail.com",
-      role: "EMPLOYEE",
-      department: "Engineering"
-    },
-    documents: []
-  },
-  {
-    id: "cmq7v1wl0000byij7abgqap5i",
-    applicantType: "EXECUTIVE",
-    applicantName: "ENAKO CEO",
-    email: "ceo@enako.com",
-    phone: "+237690000001",
-    status: "APPROVED",
-    createdAt: "2026-06-10T09:22:51.060Z",
-    payload: {
-      fullName: "ENAKO CEO",
-      email: "ceo@enako.com",
-      role: "CEO",
-      department: "Executive"
-    },
-    documents: []
-  },
-  {
-    id: "cmsr8pqyt000bw5pkyh2uxx9v",
-    applicantType: "MANAGER",
-    applicantName: "Chinji Clinton",
-    email: "enakooutreach@gmail.com",
-    phone: "+237690000008",
-    status: "APPROVED",
-    createdAt: "2026-08-13T08:12:20.549Z",
-    payload: {
-      fullName: "Chinji Clinton",
-      email: "enakooutreach@gmail.com",
-      role: "OUTREACH_MANAGER",
-      department: "Outreach / NGO"
-    },
-    documents: []
-  },
-  {
-    id: "cmsrbfnbe0009lg29jui4e45z",
-    applicantType: "MANAGER",
-    applicantName: "Nchang Chelsea",
-    email: "enakomgt@gmail.com",
-    phone: "+237690000003",
-    status: "APPROVED",
-    createdAt: "2026-08-13T09:28:28.106Z",
-    payload: {
-      fullName: "Nchang Chelsea",
-      email: "enakomgt@gmail.com",
-      role: "MANAGER",
-      department: "Management"
-    },
-    documents: []
-  }
-];
+// Real KYC Submissions loaded dynamically from Backend API / Database
+const REAL_DATABASE_KYC_RECORDS: any[] = [];
+
 
 export async function fetchRemoteKycSubmissions(params?: {
   status?: string;
@@ -770,11 +556,9 @@ export function extractClientFromKycSubmission(item: any): Client {
 }
 
 export function getInitialKycApprovedClients(): Client[] {
-  const approvedSubmissions = REAL_DATABASE_KYC_RECORDS.filter(
-    (k) => k.status === 'APPROVED' || k.isVerified
-  );
-  return approvedSubmissions.map((sub) => extractClientFromKycSubmission(sub));
+  return [];
 }
+
 
 // ─── AUTOMATED EMAIL NOTIFICATION SERVICE ───
 

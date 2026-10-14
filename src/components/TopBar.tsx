@@ -7,7 +7,8 @@ import {
   Search,
   Wifi,
   WifiOff,
-  X
+  X,
+  LogOut
 } from 'lucide-react';
 import { ViewType, CollectorUser } from '../types';
 
@@ -20,6 +21,7 @@ interface TopBarProps {
   onOpenMobileMenu: () => void;
   globalSearch: string;
   onGlobalSearchChange: (query: string) => void;
+  onLogout?: () => void;
 }
 
 export const TopBar: React.FC<TopBarProps> = ({
@@ -31,6 +33,7 @@ export const TopBar: React.FC<TopBarProps> = ({
   onOpenMobileMenu,
   globalSearch,
   onGlobalSearchChange,
+  onLogout,
 }) => {
   const [showMobileSearch, setShowMobileSearch] = useState(false);
 
@@ -132,6 +135,19 @@ export const TopBar: React.FC<TopBarProps> = ({
           >
             <UserIcon className="w-4 h-4" />
           </button>
+
+          {/* Direct Sign Out Button */}
+          {onLogout && (
+            <button
+              onClick={onLogout}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-red-600 hover:text-white hover:bg-red-600 border border-red-200 hover:border-red-600 transition-colors cursor-pointer ml-1"
+              title="Sign Out of Terminal"
+              aria-label="Sign Out"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Sign Out</span>
+            </button>
+          )}
         </div>
       </div>
 

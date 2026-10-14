@@ -19,7 +19,6 @@ import { ExchangeRatesView } from './components/ExchangeRatesView';
 import { KycView } from './components/KycView';
 import { CollectorsView } from './components/CollectorsView';
 import { LoginView } from './components/LoginView';
-import { ClientKycPortal } from './components/ClientKycPortal';
 import { ReceiptModal } from './components/ReceiptModal';
 import { GenerateReportModal } from './components/GenerateReportModal';
 import { SettingsModal } from './components/SettingsModal';
@@ -53,30 +52,18 @@ const VALID_VIEWS: ViewType[] = [
   'create-transaction',
   'update-rates',
   'kyc',
-  'client-kyc',
 ];
 
 const getInitialView = (): ViewType => {
   if (typeof window !== 'undefined') {
-    // If accessing kyc.enakootc.com domain or kyc subdomain, default directly to Client KYC Portal
-    const host = window.location.hostname.toLowerCase();
-    if (host.startsWith('kyc.') || host.includes('kyc.')) {
-      return 'client-kyc';
-    }
     const hash = window.location.hash.replace(/^#\/?/, '').trim() as ViewType;
-    if (hash === 'kyc-portal' || hash === 'portal') {
-      return 'client-kyc';
-    }
     if (VALID_VIEWS.includes(hash)) {
       return hash;
     }
     const urlParams = new URLSearchParams(window.location.search);
-    const viewParam = (urlParams.get('view') || urlParams.get('tab') || urlParams.get('portal')) as ViewType;
+    const viewParam = (urlParams.get('view') || urlParams.get('tab')) as ViewType;
     if (viewParam && VALID_VIEWS.includes(viewParam)) {
       return viewParam;
-    }
-    if (urlParams.get('kyc') !== null || urlParams.get('portal') === 'kyc') {
-      return 'client-kyc';
     }
     const saved = localStorage.getItem('enako_cash_current_view') as ViewType;
     if (saved && VALID_VIEWS.includes(saved)) {
@@ -133,9 +120,9 @@ export default function App() {
     }
   }, [user, currentView]);
 
-  // Auto-clear data on first load if requested to start completely clean
+  // Auto-clear demo / stale data on load to start completely clean with live database
   useEffect(() => {
-    const isCleared = localStorage.getItem('enako_cash_data_cleared_v1');
+    const isCleared = localStorage.getItem('enako_cash_data_cleared_v3');
     if (!isCleared) {
       localStorage.removeItem('enako_collections');
       localStorage.removeItem('enako_clients');
@@ -145,7 +132,8 @@ export default function App() {
       localStorage.removeItem('afriland_collections');
       localStorage.removeItem('afriland_clients');
       localStorage.removeItem('afriland_drafts');
-      localStorage.setItem('enako_cash_data_cleared_v1', 'true');
+      localStorage.removeItem('enako_cash_transactions');
+      localStorage.setItem('enako_cash_data_cleared_v3', 'true');
     }
   }, []);
 
@@ -164,10 +152,9 @@ export default function App() {
     return [...missingKyc, ...parsed];
   });
 
-  // Collections (Settled / Server synced)
-  // Collections (Settled / Server synced)
+  // Collections (Settled / Server synced from Backend API)
   const [collections, setCollections] = useState<Collection[]>(() => {
-    const cleared = localStorage.getItem('enako_cash_data_cleared_v1');
+    const cleared = localStorage.getItem('enako_cash_data_cleared_v3');
     if (!cleared) return [];
     const saved = localStorage.getItem('enako_collections');
     return saved ? JSON.parse(saved) : [];
@@ -420,10 +407,20 @@ export default function App() {
 
   // Logout handler
   const handleLogout = () => {
-    setUser({ ...user, isLoggedIn: false });
+    const loggedOutUser: CollectorUser = {
+      ...INITIAL_USER,
+      isLoggedIn: false,
+    };
+    setUser(loggedOutUser);
+    localStorage.setItem('enako_user', JSON.stringify(loggedOutUser));
+    localStorage.removeItem('afriland_user');
+    localStorage.removeItem('enako_access_token');
+    localStorage.removeItem('access_token');
+    sessionStorage.removeItem('enako_access_token');
     localStorage.removeItem('enako_cash_current_view');
     if (typeof window !== 'undefined') {
-      window.history.replaceState(null, '', ' ');
+      window.location.hash = '';
+      window.history.replaceState(null, '', window.location.pathname);
     }
     setCurrentView('dashboard');
     showToast('Signed out of terminal successfully.', 'info');
@@ -669,22 +666,13 @@ export default function App() {
     showToast('Terminal factory reset complete.', 'success');
   };
 
-  // When not logged in, render the Login Screen or Client KYC Portal
+  // When not logged in, render the Login Screen
   if (!user.isLoggedIn) {
-    if (currentView === 'client-kyc') {
-      return (
-        <ClientKycPortal
-          onBackToTerminal={() => setCurrentView('dashboard')}
-          onShowToast={showToast}
-        />
-      );
-    }
     return (
       <LoginView
         currentUser={user}
         onLogin={handleLogin}
         onSignUp={handleSignUp}
-        onOpenClientKyc={() => setCurrentView('client-kyc')}
       />
     );
   }
@@ -723,6 +711,7 @@ export default function App() {
           onOpenSettings={() => setIsSettingsModalOpen(true)}
           onOpenProfile={() => setIsProfileModalOpen(true)}
           onOpenMobileMenu={() => setMobileMenuOpen(true)}
+          onLogout={handleLogout}
           globalSearch={globalSearch}
           onGlobalSearchChange={(q) => {
             setGlobalSearch(q);
@@ -840,14 +829,6 @@ export default function App() {
               user={user}
               onShowToast={showToast}
               onAutoCreateClient={handleAutoCreateClientFromKyc}
-              onOpenClientKycPortal={() => setCurrentView('client-kyc')}
-            />
-          )}
-
-          {currentView === 'client-kyc' && (
-            <ClientKycPortal
-              onBackToTerminal={() => setCurrentView('dashboard')}
-              onShowToast={showToast}
             />
           )}
         </main>

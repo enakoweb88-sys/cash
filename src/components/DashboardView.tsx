@@ -95,50 +95,34 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const availableJobs = collectorCollections.filter((c) => c.status === 'PENDING');
   const settledJobs = collectorCollections.filter((c) => c.status === 'COMPLETE');
 
-  // Lacking / Deficit Jobs (where client gave less than target)
+  // Lacking / Deficit Jobs (only jobs where an actual shortfall was recorded)
   const lackingJobs = collectorCollections.filter((c) => {
-    const target = c.targetAmount || c.amount || 0;
-    const actual = c.actualAmountCollected !== undefined 
-      ? c.actualAmountCollected 
-      : (c.status === 'COMPLETE' ? c.amount : 0);
-    const short = c.shortageAmount !== undefined && c.shortageAmount > 0 
-      ? c.shortageAmount 
-      : Math.max(0, target - actual);
-    return short > 0;
+    return Boolean(c.shortageAmount && Number(c.shortageAmount) > 0);
   });
 
   const totalLackingAmount = lackingJobs.reduce((sum, c) => {
-    const target = c.targetAmount || c.amount || 0;
-    const actual = c.actualAmountCollected !== undefined 
-      ? c.actualAmountCollected 
-      : (c.status === 'COMPLETE' ? c.amount : 0);
-    const short = c.shortageAmount !== undefined && c.shortageAmount > 0 
-      ? c.shortageAmount 
-      : Math.max(0, target - actual);
-    return sum + short;
+    return sum + Number(c.shortageAmount || 0);
   }, 0);
 
-  const totalActualCollected = collectorCollections.reduce((sum, c) => {
+  const totalActualCollected = settledJobs.reduce((sum, c) => {
     const actual = c.actualAmountCollected !== undefined 
-      ? c.actualAmountCollected 
-      : (c.status === 'COMPLETE' ? c.amount : 0);
+      ? Number(c.actualAmountCollected) 
+      : Number(c.amount || 0);
     return sum + actual;
   }, 0);
 
   // CEO / Executive Totals
   const totalCompletedAmount = collections
     .filter((c) => c.status === 'COMPLETE')
-    .reduce((sum, c) => sum + c.amount, 0);
+    .reduce((sum, c) => {
+      const actual = c.actualAmountCollected !== undefined 
+        ? Number(c.actualAmountCollected) 
+        : Number(c.amount || 0);
+      return sum + actual;
+    }, 0);
 
   const totalCompanyLackingAmount = collections.reduce((sum, c) => {
-    const target = c.targetAmount || c.amount || 0;
-    const actual = c.actualAmountCollected !== undefined 
-      ? c.actualAmountCollected 
-      : (c.status === 'COMPLETE' ? c.amount : 0);
-    const short = c.shortageAmount !== undefined && c.shortageAmount > 0 
-      ? c.shortageAmount 
-      : Math.max(0, target - actual);
-    return sum + short;
+    return sum + (c.shortageAmount && Number(c.shortageAmount) > 0 ? Number(c.shortageAmount) : 0);
   }, 0);
 
   const pendingCount = collections.filter((c) => c.status === 'PENDING').length;
@@ -570,18 +554,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     return (
       <div className="max-w-7xl mx-auto flex flex-col gap-6 font-sans">
         {/* Header & Quick Action */}
-        <div className="bg-white p-6 border border-[#e5e5e5] shadow-xs flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
             <div className="flex items-center gap-2 text-[10px] font-bold text-[#0891b2] uppercase tracking-widest">
               <span>Field Operations</span>
               <span>/</span>
               <span>Collector Terminal</span>
             </div>
-            <h2 className="text-2xl font-bold tracking-tight text-[#1a1c1c] mt-1">
+            <h2 className="text-2xl font-bold tracking-tight text-slate-900 mt-1">
               Welcome, {firstName}
             </h2>
-            <p className="text-xs text-[#595959] mt-0.5">
-              Terminal ID: <strong className="text-[#1a1c1c]">{user?.terminalId || 'TRM-ACTIVE'}</strong> · Branch: {user?.branch || 'Douala Main Hub'}
+            <p className="text-xs text-slate-500 mt-0.5">
+              Terminal ID: <strong className="text-slate-800 font-mono">{user?.terminalId || 'TRM-ACTIVE'}</strong> · Branch: <span className="font-semibold text-slate-700">{user?.branch || 'Douala Main Hub'}</span>
             </p>
           </div>
 
@@ -589,7 +573,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             {onOpenReport && (
               <button
                 onClick={onOpenReport}
-                className="flex-1 md:flex-none px-4 py-2.5 bg-white border border-[#0891b2] text-[#0891b2] hover:bg-[#ecfeff] text-xs font-bold tracking-wider uppercase flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs"
+                className="flex-1 md:flex-none px-4 py-2.5 bg-white border border-[#0891b2] text-[#0891b2] hover:bg-[#ecfeff] rounded-xl text-xs font-bold tracking-wider uppercase flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs"
               >
                 <FileText className="w-4 h-4 text-[#0891b2]" />
                 <span>Generate Report</span>
@@ -598,7 +582,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
             <button
               onClick={() => onNavigate('new-collection')}
-              className="flex-1 md:flex-none px-5 py-2.5 bg-[#0891b2] hover:bg-[#0e7490] text-white text-xs font-bold tracking-wider uppercase flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs"
+              className="flex-1 md:flex-none px-5 py-2.5 bg-[#0891b2] hover:bg-[#0e7490] text-white rounded-xl text-xs font-bold tracking-wider uppercase flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs"
             >
               <Plus className="w-4 h-4 stroke-[3]" />
               <span>Create New Collection</span>
@@ -607,29 +591,33 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
 
         {/* Operation Metrics Cards (Deficit, Volume, Tasks) */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
           {/* Card 1: Outstanding Shortfall / Balance Lacking Card */}
           <div 
             onClick={() => setCollectorTab('lacking')}
-            className="bg-white border border-[#e5e5e5] border-l-4 border-l-[#ba1a1a] p-5 shadow-xs flex flex-col justify-between cursor-pointer hover:border-[#ba1a1a] transition-all group"
+            className="bg-white border border-rose-200/80 rounded-2xl p-5 shadow-xs hover:shadow-md hover:border-rose-400 flex flex-col justify-between cursor-pointer transition-all duration-200 group relative overflow-hidden"
           >
-            <div className="flex justify-between items-center text-[#595959]">
-              <span className="text-[10px] font-bold tracking-wider uppercase text-[#ba1a1a]">
-                Balance Lacking / Shortfall
-              </span>
-              <AlertCircle className="w-5 h-5 text-[#ba1a1a]" />
+            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-rose-500 to-red-600" />
+            <div className="flex justify-between items-start">
+              <div>
+                <span className="text-[10px] font-bold tracking-wider uppercase text-rose-600 block">
+                  Balance Lacking / Shortfall
+                </span>
+                <div className="mt-2 flex items-baseline gap-1.5 flex-wrap">
+                  <span className="text-2xl sm:text-3xl font-extrabold text-rose-600 tracking-tight tabular-nums">
+                    {formatXAF(totalLackingAmount)}
+                  </span>
+                  <span className="text-xs font-bold text-rose-500 uppercase tracking-wide">FCFA</span>
+                </div>
+              </div>
+              <div className="w-11 h-11 rounded-xl bg-rose-50 border border-rose-100 flex items-center justify-center text-rose-600 group-hover:scale-110 transition-transform shrink-0">
+                <AlertCircle className="w-5 h-5" />
+              </div>
             </div>
 
-            <div className="my-3">
-              <span className="text-3xl font-black text-[#ba1a1a] font-mono">
-                {formatXAF(totalLackingAmount)}
-              </span>
-              <span className="text-sm font-bold text-[#ba1a1a] ml-2">FCFA</span>
-            </div>
-
-            <div className="flex items-center justify-between text-[11px] pt-2 border-t border-[#fef2f2]">
-              <span className="text-[#595959]">{lackingJobs.length} transactions with deficit</span>
-              <span className="font-bold text-[#ba1a1a] group-hover:underline flex items-center gap-0.5">
+            <div className="flex items-center justify-between text-xs pt-3 mt-3 border-t border-rose-100/70">
+              <span className="text-slate-500 font-medium">{lackingJobs.length} transactions with deficit</span>
+              <span className="font-bold text-rose-600 group-hover:translate-x-0.5 transition-transform flex items-center gap-1">
                 <span>View All</span>
                 <ChevronRight className="w-3.5 h-3.5" />
               </span>
@@ -637,60 +625,73 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
 
           {/* Card 2: Total Collected Volume */}
-          <div className="bg-white border border-[#e5e5e5] border-l-4 border-l-[#0891b2] p-5 shadow-xs flex flex-col justify-between">
-            <div className="flex justify-between items-center text-[#595959]">
-              <span className="text-[10px] font-bold tracking-wider uppercase text-[#0891b2]">
-                Total Received Volume
-              </span>
-              <Wallet className="w-5 h-5 text-[#0891b2]" />
+          <div className="bg-white border border-slate-200/90 rounded-2xl p-5 shadow-xs hover:shadow-md hover:border-cyan-400 flex flex-col justify-between transition-all duration-200 group relative overflow-hidden">
+            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-[#0891b2] to-cyan-500" />
+            <div className="flex justify-between items-start">
+              <div>
+                <span className="text-[10px] font-bold tracking-wider uppercase text-[#0891b2] block">
+                  Total Received Volume
+                </span>
+                <div className="mt-2 flex items-baseline gap-1.5 flex-wrap">
+                  <span className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight tabular-nums">
+                    {formatXAF(totalActualCollected)}
+                  </span>
+                  <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">FCFA</span>
+                </div>
+              </div>
+              <div className="w-11 h-11 rounded-xl bg-cyan-50 border border-cyan-100 flex items-center justify-center text-[#0891b2] group-hover:scale-110 transition-transform shrink-0">
+                <Wallet className="w-5 h-5" />
+              </div>
             </div>
 
-            <div className="my-3">
-              <span className="text-3xl font-black text-[#1a1c1c] font-mono">
-                {formatXAF(totalActualCollected)}
-              </span>
-              <span className="text-sm font-bold text-[#595959] ml-2">FCFA</span>
-            </div>
-
-            <div className="text-[11px] text-[#0891b2] font-semibold pt-2 border-t border-[#f0fdf4]">
-              {settledJobs.length} completed field settlements
+            <div className="flex items-center justify-between text-xs pt-3 mt-3 border-t border-slate-100">
+              <span className="text-slate-500 font-medium">{settledJobs.length} completed settlements</span>
+              <span className="text-xs font-bold text-[#0891b2]">100% Synced</span>
             </div>
           </div>
 
           {/* Card 3: Pending Tasks */}
           <div 
             onClick={() => setCollectorTab('available')}
-            className="bg-white border border-[#e5e5e5] border-l-4 border-l-[#ca8a04] p-5 shadow-xs flex flex-col justify-between cursor-pointer hover:border-[#ca8a04] transition-all"
+            className="bg-white border border-amber-200/80 rounded-2xl p-5 shadow-xs hover:shadow-md hover:border-amber-400 flex flex-col justify-between cursor-pointer transition-all duration-200 group relative overflow-hidden"
           >
-            <div className="flex justify-between items-center text-[#595959]">
-              <span className="text-[10px] font-bold tracking-wider uppercase text-[#ca8a04]">
-                Pending Field Jobs
-              </span>
-              <Clock className="w-5 h-5 text-[#ca8a04]" />
+            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-amber-500 to-yellow-500" />
+            <div className="flex justify-between items-start">
+              <div>
+                <span className="text-[10px] font-bold tracking-wider uppercase text-amber-600 block">
+                  Pending Field Jobs
+                </span>
+                <div className="mt-2 flex items-baseline gap-1.5 flex-wrap">
+                  <span className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight tabular-nums">
+                    {availableJobs.length}
+                  </span>
+                  <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">TASKS</span>
+                </div>
+              </div>
+              <div className="w-11 h-11 rounded-xl bg-amber-50 border border-amber-100 flex items-center justify-center text-amber-600 group-hover:scale-110 transition-transform shrink-0">
+                <Clock className="w-5 h-5" />
+              </div>
             </div>
 
-            <div className="my-3">
-              <span className="text-3xl font-black text-[#1a1c1c] font-mono">
-                {availableJobs.length}
+            <div className="flex items-center justify-between text-xs pt-3 mt-3 border-t border-amber-100/70">
+              <span className="text-amber-700 font-medium">Awaiting on-site collection</span>
+              <span className="font-bold text-amber-700 group-hover:translate-x-0.5 transition-transform flex items-center gap-1">
+                <span>View Queue</span>
+                <ChevronRight className="w-3.5 h-3.5" />
               </span>
-              <span className="text-xs font-bold text-[#595959] ml-2">TASKS</span>
-            </div>
-
-            <div className="text-[11px] text-[#ca8a04] font-semibold pt-2 border-t border-[#fefce8]">
-              Awaiting on-site collection
             </div>
           </div>
         </div>
 
         {/* Tab Navigation for Available vs Settled vs Lacking Jobs */}
-        <div className="bg-white border border-[#e5e5e5] p-2 shadow-xs flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
+        <div className="bg-white border border-slate-200 rounded-2xl p-2 shadow-xs flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
           <div className="flex items-center gap-2 overflow-x-auto">
             <button
               onClick={() => setCollectorTab('available')}
-              className={`px-4 py-2.5 text-xs font-bold uppercase tracking-wider flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
+              className={`px-4 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
                 collectorTab === 'available'
                   ? 'bg-[#0891b2] text-white shadow-xs'
-                  : 'text-[#595959] hover:text-[#1a1c1c] hover:bg-[#f2f2f2]'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
               }`}
             >
               <Briefcase className="w-4 h-4" />
@@ -699,10 +700,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
             <button
               onClick={() => setCollectorTab('settled')}
-              className={`px-4 py-2.5 text-xs font-bold uppercase tracking-wider flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
+              className={`px-4 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
                 collectorTab === 'settled'
                   ? 'bg-[#16a34a] text-white shadow-xs'
-                  : 'text-[#595959] hover:text-[#1a1c1c] hover:bg-[#f2f2f2]'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
               }`}
             >
               <CheckCircle2 className="w-4 h-4" />
@@ -711,10 +712,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
             <button
               onClick={() => setCollectorTab('lacking')}
-              className={`px-4 py-2.5 text-xs font-bold uppercase tracking-wider flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
+              className={`px-4 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
                 collectorTab === 'lacking'
-                  ? 'bg-[#ba1a1a] text-white shadow-xs'
-                  : 'text-[#ba1a1a] hover:bg-[#fee2e2]'
+                  ? 'bg-rose-600 text-white shadow-xs'
+                  : 'text-rose-600 hover:bg-rose-50'
               }`}
             >
               <AlertCircle className="w-4 h-4 text-inherit" />
@@ -722,8 +723,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </button>
           </div>
 
-          <div className="hidden sm:block text-xs font-medium text-[#595959] pr-3">
-            Click any card to inspect or update received volume
+          <div className="hidden sm:block text-xs font-medium text-slate-500 pr-3">
+            Click any collection card to inspect or update received volume
           </div>
         </div>
 
@@ -731,13 +732,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         {collectorTab === 'available' && (
           <div className="space-y-4">
             {availableJobs.length === 0 ? (
-              <div className="bg-white border border-[#e5e5e5] p-12 text-center text-[#595959] font-bold shadow-xs">
-                <CheckCircle2 className="w-10 h-10 text-[#16a34a] mx-auto mb-3" />
-                <p className="text-base text-[#1a1c1c]">No pending jobs assigned at the moment.</p>
-                <p className="text-xs text-[#595959] font-normal mt-1">All field collections assigned to you are complete.</p>
+              <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center text-slate-500 font-bold shadow-xs">
+                <CheckCircle2 className="w-12 h-12 text-[#16a34a] mx-auto mb-3" />
+                <p className="text-lg text-slate-900">No pending jobs assigned at the moment.</p>
+                <p className="text-xs text-slate-500 font-normal mt-1">All field collections assigned to you are complete.</p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
                 {availableJobs.map((col) => {
                   const target = col.targetAmount || col.amount;
                   const actual = col.actualAmountCollected !== undefined ? col.actualAmountCollected : 0;
@@ -747,38 +748,44 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     <div
                       key={col.id}
                       onClick={() => setSelectedJobDetails(col)}
-                      className="bg-white border border-[#e5e5e5] hover:border-[#0891b2] p-5 shadow-xs transition-all cursor-pointer flex flex-col justify-between group space-y-4"
+                      className="bg-white border border-slate-200 rounded-2xl hover:border-[#0891b2] p-5 shadow-xs hover:shadow-md transition-all duration-200 cursor-pointer flex flex-col justify-between group space-y-4"
                     >
                       <div>
                         {/* Top Badges */}
-                        <div className="flex items-center justify-between border-b border-[#e5e5e5] pb-3">
+                        <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                           <div className="flex items-center gap-2">
-                            <span className="font-mono font-bold text-sm text-[#0891b2] group-hover:underline">{col.id}</span>
-                            <span className="text-[10px] text-[#595959] font-mono">{col.time || 'Pending'}</span>
+                            <span className="font-mono font-bold text-xs px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 group-hover:text-[#0891b2] transition-colors">
+                              {col.id}
+                            </span>
+                            <span className="text-[11px] text-slate-500 font-mono">{col.time || 'Pending'}</span>
                           </div>
-                          <span className="px-2.5 py-0.5 bg-[#fef9c3] text-[#854d0e] border border-[#fef08a] text-[9px] font-black uppercase tracking-wider">
-                            PENDING ASSIGNMENT
+                          <span className="px-2.5 py-1 rounded-full bg-amber-50 text-amber-800 border border-amber-200/80 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5">
+                            <Clock className="w-3 h-3 text-amber-600" />
+                            <span>PENDING</span>
                           </span>
                         </div>
 
                         {/* Main Job Details */}
-                        <div className="mt-3 space-y-2">
-                          <h4 className="font-bold text-base text-[#1a1c1c] group-hover:text-[#0891b2] transition-colors">
+                        <div className="mt-3 space-y-2.5">
+                          <h4 className="font-bold text-base text-slate-900 group-hover:text-[#0891b2] transition-colors truncate">
                             {col.clientName}
                           </h4>
 
-                          <div className="text-2xl font-black text-[#1a1c1c] font-mono">
-                            {formatXAF(target)} <span className="text-xs text-[#595959] font-sans font-bold">FCFA</span>
+                          <div className="p-3 rounded-xl bg-slate-50 border border-slate-100 flex items-baseline justify-between">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">TARGET DUE</span>
+                            <div className="text-xl font-black text-slate-900 font-mono">
+                              {formatXAF(target)} <span className="text-xs text-slate-500 font-sans font-bold">FCFA</span>
+                            </div>
                           </div>
 
                           {shortage > 0 && (
-                            <div className="p-2 bg-[#fee2e2] text-[#991b1b] border border-[#fca5a5] text-[11px] font-bold flex items-center justify-between">
+                            <div className="p-2.5 rounded-xl bg-rose-50 text-rose-800 border border-rose-200 text-xs font-bold flex items-center justify-between">
                               <span>Balance Lacking:</span>
-                              <span className="font-mono">{formatXAF(shortage)} FCFA</span>
+                              <span className="font-mono font-black">{formatXAF(shortage)} FCFA</span>
                             </div>
                           )}
 
-                          <div className="space-y-1 pt-2 text-xs text-[#595959]">
+                          <div className="space-y-1.5 pt-1 text-xs text-slate-600">
                             <div className="flex items-center gap-2">
                               <MapPin className="w-3.5 h-3.5 text-[#0891b2] shrink-0" />
                               <span className="truncate">{col.location || 'Douala Commercial Sector'}</span>
@@ -792,10 +799,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       </div>
 
                       {/* Bottom Action Footer */}
-                      <div className="pt-3 border-t border-[#e5e5e5] flex items-center justify-between">
+                      <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
                         <span className="text-xs font-bold text-[#0891b2] flex items-center gap-1 group-hover:underline">
                           <Eye className="w-4 h-4" />
-                          <span>View Details & Photo</span>
+                          <span>View Details</span>
                         </span>
 
                         <button
@@ -805,7 +812,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                             if (onOpenStatusUpdate) onOpenStatusUpdate(col);
                             else onSelectCollection(col);
                           }}
-                          className="px-3.5 py-1.5 bg-[#0891b2] hover:bg-[#0e7490] text-white text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shadow-xs"
+                          className="px-3.5 py-2 rounded-xl bg-[#0891b2] hover:bg-[#0e7490] text-white text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shadow-xs transition-colors"
                         >
                           <Check className="w-3.5 h-3.5 stroke-[3]" />
                           <span>Complete Job</span>
@@ -823,11 +830,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         {collectorTab === 'settled' && (
           <div className="space-y-4">
             {settledJobs.length === 0 ? (
-              <div className="bg-white border border-[#e5e5e5] p-12 text-center text-[#595959] font-bold shadow-xs">
-                <p className="text-base text-[#1a1c1c]">No settled jobs recorded yet.</p>
+              <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center text-slate-500 font-bold shadow-xs">
+                <p className="text-base text-slate-900">No settled jobs recorded yet.</p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
                 {settledJobs.map((col) => {
                   const target = col.targetAmount || col.amount;
                   const actual = col.actualAmountCollected !== undefined ? col.actualAmountCollected : col.amount;
@@ -837,38 +844,44 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     <div
                       key={col.id}
                       onClick={() => setSelectedJobDetails(col)}
-                      className="bg-white border border-[#e5e5e5] hover:border-[#16a34a] p-5 shadow-xs transition-all cursor-pointer flex flex-col justify-between group space-y-4"
+                      className="bg-white border border-slate-200 rounded-2xl hover:border-[#16a34a] p-5 shadow-xs hover:shadow-md transition-all duration-200 cursor-pointer flex flex-col justify-between group space-y-4"
                     >
                       <div>
                         {/* Top Badges */}
-                        <div className="flex items-center justify-between border-b border-[#e5e5e5] pb-3">
+                        <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                           <div className="flex items-center gap-2">
-                            <span className="font-mono font-bold text-sm text-[#16a34a] group-hover:underline">{col.id}</span>
-                            <span className="text-[10px] text-[#595959] font-mono">{new Date(col.timestamp || Date.now()).toLocaleDateString()} {col.time}</span>
+                            <span className="font-mono font-bold text-xs px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200/60">
+                              {col.id}
+                            </span>
+                            <span className="text-[11px] text-slate-500 font-mono">{new Date(col.timestamp || Date.now()).toLocaleDateString()} {col.time}</span>
                           </div>
-                          <span className="px-2 py-0.5 bg-[#dcfce7] text-[#166534] border border-[#86efac] text-[9px] font-black uppercase tracking-wider">
-                            SETTLED
+                          <span className="px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200/80 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
+                            <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                            <span>SETTLED</span>
                           </span>
                         </div>
 
                         {/* Main Details */}
-                        <div className="mt-3 space-y-2">
-                          <h4 className="font-bold text-base text-[#1a1c1c] group-hover:text-[#16a34a] transition-colors">
+                        <div className="mt-3 space-y-2.5">
+                          <h4 className="font-bold text-base text-slate-900 group-hover:text-[#16a34a] transition-colors truncate">
                             {col.clientName}
                           </h4>
 
-                          <div className="text-2xl font-black text-[#1a1c1c] font-mono">
-                            {formatXAF(actual)} <span className="text-xs text-[#595959] font-sans font-bold">FCFA</span>
+                          <div className="p-3 rounded-xl bg-emerald-50/50 border border-emerald-100 flex items-baseline justify-between">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700">COLLECTED</span>
+                            <div className="text-xl font-black text-emerald-700 font-mono">
+                              {formatXAF(actual)} <span className="text-xs text-emerald-600 font-sans font-bold">FCFA</span>
+                            </div>
                           </div>
 
                           {shortage > 0 && (
-                            <div className="p-2 bg-[#fee2e2] text-[#991b1b] border border-[#fca5a5] text-[11px] font-bold flex items-center justify-between">
+                            <div className="p-2.5 rounded-xl bg-rose-50 text-rose-800 border border-rose-200 text-xs font-bold flex items-center justify-between">
                               <span>Shortfall Balance:</span>
-                              <span className="font-mono">{formatXAF(shortage)} FCFA</span>
+                              <span className="font-mono font-black">{formatXAF(shortage)} FCFA</span>
                             </div>
                           )}
 
-                          <div className="space-y-1 pt-2 text-xs text-[#595959]">
+                          <div className="space-y-1.5 pt-1 text-xs text-slate-600">
                             <div className="flex items-center gap-2">
                               <MapPin className="w-3.5 h-3.5 text-[#16a34a] shrink-0" />
                               <span className="truncate">{col.location || 'Douala Commercial Sector'}</span>
@@ -881,10 +894,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                         </div>
                       </div>
 
-                      <div className="pt-3 border-t border-[#e5e5e5] flex items-center justify-between">
+                      <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
                         <span className="text-xs font-bold text-[#16a34a] flex items-center gap-1 group-hover:underline">
                           <Eye className="w-4 h-4" />
-                          <span>View Full Record & Photo</span>
+                          <span>View Full Record & Slip</span>
                         </span>
                         <ChevronRight className="w-4 h-4 text-[#16a34a]" />
                       </div>
@@ -899,24 +912,24 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         {/* Lacking Balance Jobs Card Grid (The dedicated shortfall tab) */}
         {collectorTab === 'lacking' && (
           <div className="space-y-4">
-            <div className="p-4 bg-[#fef2f2] border border-[#fca5a5] text-[#991b1b] flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+            <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl text-rose-900 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
               <div>
-                <strong className="text-sm block">Transactions with Outstanding Shortfall / Lacking Balance</strong>
-                <span>These collections were partially paid by the client. You can update how much was received when the remainder is handed over.</span>
+                <strong className="text-sm block font-bold">Transactions with Outstanding Shortfall / Lacking Balance</strong>
+                <span className="text-rose-700">These collections were partially paid by the client. You can update how much was received when the remainder is handed over.</span>
               </div>
-              <div className="font-mono text-base font-black px-3 py-1 bg-white border border-[#fca5a5] shrink-0">
+              <div className="font-mono text-base font-black px-4 py-2 bg-white rounded-xl border border-rose-200 text-rose-700 shrink-0 shadow-2xs">
                 Total Shortfall: {formatXAF(totalLackingAmount)} FCFA
               </div>
             </div>
 
             {lackingJobs.length === 0 ? (
-              <div className="bg-white border border-[#e5e5e5] p-12 text-center text-[#595959] font-bold shadow-xs">
-                <CheckCircle2 className="w-10 h-10 text-[#16a34a] mx-auto mb-3" />
-                <p className="text-base text-[#1a1c1c]">No lacking balance or shortfall transactions!</p>
-                <p className="text-xs text-[#595959] font-normal mt-1">All collections match 100% of their target amounts.</p>
+              <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center text-slate-500 font-bold shadow-xs">
+                <CheckCircle2 className="w-12 h-12 text-[#16a34a] mx-auto mb-3" />
+                <p className="text-lg text-slate-900">No lacking balance or shortfall transactions!</p>
+                <p className="text-xs text-slate-500 font-normal mt-1">All collections match 100% of their target amounts.</p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
                 {lackingJobs.map((col) => {
                   const target = col.targetAmount || col.amount;
                   const actual = col.actualAmountCollected !== undefined 
@@ -928,55 +941,57 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     <div
                       key={col.id}
                       onClick={() => setSelectedJobDetails(col)}
-                      className="bg-white border-2 border-[#fca5a5] hover:border-[#ba1a1a] p-5 shadow-xs transition-all cursor-pointer flex flex-col justify-between group space-y-4"
+                      className="bg-white border-2 border-rose-200 rounded-2xl hover:border-rose-500 p-5 shadow-xs hover:shadow-md transition-all duration-200 cursor-pointer flex flex-col justify-between group space-y-4"
                     >
                       <div>
                         {/* Top Badges */}
-                        <div className="flex items-center justify-between border-b border-[#e5e5e5] pb-3">
+                        <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                           <div className="flex items-center gap-2">
-                            <span className="font-mono font-bold text-sm text-[#ba1a1a] group-hover:underline">{col.id}</span>
-                            <span className="text-[10px] text-[#595959] font-mono">{col.time}</span>
+                            <span className="font-mono font-bold text-xs px-2.5 py-1 rounded-lg bg-rose-50 text-rose-800 border border-rose-200/60">
+                              {col.id}
+                            </span>
+                            <span className="text-[11px] text-slate-500 font-mono">{col.time}</span>
                           </div>
-                          <span className="px-2 py-0.5 bg-[#fee2e2] text-[#991b1b] border border-[#fca5a5] text-[9px] font-black uppercase tracking-wider flex items-center gap-1">
-                            <AlertCircle className="w-3 h-3 text-[#ba1a1a]" />
-                            <span>DEFICIT SHORTFALL</span>
+                          <span className="px-2.5 py-1 rounded-full bg-rose-50 text-rose-800 border border-rose-200/80 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
+                            <AlertCircle className="w-3 h-3 text-rose-600" />
+                            <span>DEFICIT</span>
                           </span>
                         </div>
 
                         {/* Client & Financial Metrics Breakdown */}
                         <div className="mt-3 space-y-3">
-                          <h4 className="font-bold text-base text-[#1a1c1c] group-hover:text-[#ba1a1a] transition-colors">
+                          <h4 className="font-bold text-base text-slate-900 group-hover:text-rose-600 transition-colors truncate">
                             {col.clientName}
                           </h4>
 
-                          <div className="p-3 bg-[#f8fafc] border border-[#e2e8f0] grid grid-cols-3 gap-2 text-center">
+                          <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/80 grid grid-cols-3 gap-2 text-center">
                             <div>
-                              <span className="text-[10px] text-[#595959] uppercase font-bold block">TARGET</span>
-                              <span className="text-xs font-mono font-bold text-[#1a1c1c]">{formatXAF(target)}</span>
+                              <span className="text-[10px] text-slate-500 uppercase font-bold block">TARGET</span>
+                              <span className="text-xs font-mono font-bold text-slate-900">{formatXAF(target)}</span>
                             </div>
-                            <div className="border-x border-[#e2e8f0]">
+                            <div className="border-x border-slate-200">
                               <span className="text-[10px] text-[#0891b2] uppercase font-bold block">RECEIVED</span>
                               <span className="text-xs font-mono font-bold text-[#0891b2]">{formatXAF(actual)}</span>
                             </div>
                             <div>
-                              <span className="text-[10px] text-[#ba1a1a] uppercase font-bold block">LACKING</span>
-                              <span className="text-xs font-mono font-extrabold text-[#ba1a1a]">{formatXAF(shortage)}</span>
+                              <span className="text-[10px] text-rose-600 uppercase font-bold block">LACKING</span>
+                              <span className="text-xs font-mono font-black text-rose-600">{formatXAF(shortage)}</span>
                             </div>
                           </div>
 
                           {col.summaryNote && (
-                            <p className="text-[11px] text-[#595959] italic bg-[#f9f9f9] p-2 border border-[#e5e5e5]">
+                            <p className="text-[11px] text-slate-600 italic bg-slate-50 p-2.5 rounded-xl border border-slate-200">
                               Note: "{col.summaryNote}"
                             </p>
                           )}
 
-                          <div className="space-y-1 text-xs text-[#595959]">
+                          <div className="space-y-1.5 text-xs text-slate-600">
                             <div className="flex items-center gap-2">
-                              <MapPin className="w-3.5 h-3.5 text-[#ba1a1a] shrink-0" />
+                              <MapPin className="w-3.5 h-3.5 text-rose-600 shrink-0" />
                               <span className="truncate">{col.location || 'Douala Commercial Sector'}</span>
                             </div>
                             <div className="flex items-center gap-2">
-                              <Building className="w-3.5 h-3.5 text-[#ba1a1a] shrink-0" />
+                              <Building className="w-3.5 h-3.5 text-rose-600 shrink-0" />
                               <span className="truncate">Destination: {col.depositDestination || 'Cash Collection'}</span>
                             </div>
                           </div>
@@ -984,7 +999,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       </div>
 
                       {/* Action Footer */}
-                      <div className="pt-3 border-t border-[#e5e5e5] flex items-center justify-between">
+                      <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
                         <span className="text-xs font-bold text-[#0891b2] flex items-center gap-1 group-hover:underline">
                           <Eye className="w-4 h-4" />
                           <span>View Detail</span>
@@ -997,10 +1012,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                             if (onOpenStatusUpdate) onOpenStatusUpdate(col);
                             else onSelectCollection(col);
                           }}
-                          className="px-3.5 py-1.5 bg-[#ba1a1a] hover:bg-[#93000a] text-white text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shadow-xs transition-colors"
+                          className="px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shadow-xs transition-colors"
                         >
                           <Check className="w-3.5 h-3.5 stroke-[3]" />
-                          <span>Update Received Amount</span>
+                          <span>Update Amount</span>
                         </button>
                       </div>
                     </div>
@@ -1018,17 +1033,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   return (
     <div className="max-w-7xl mx-auto flex flex-col gap-6 font-sans">
       {/* Header & Quick Action */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-[#e5e5e5] pb-4 bg-white p-6 shadow-xs">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-6 rounded-2xl border border-slate-200 shadow-xs">
         <div>
           <div className="flex items-center gap-2 text-[10px] font-bold text-[#0891b2] uppercase tracking-widest">
             <span>Executive Overview</span>
             <span>/</span>
             <span>Management Console</span>
           </div>
-          <h2 className="text-2xl font-bold tracking-tight text-[#1a1c1c] mt-1">
+          <h2 className="text-2xl font-bold tracking-tight text-slate-900 mt-1">
             Welcome, {firstName} (CEO)
           </h2>
-          <p className="text-xs text-[#595959] mt-0.5">
+          <p className="text-xs text-slate-500 mt-0.5">
             Real-time multi-branch cash collection & liquidity operations status.
           </p>
         </div>
@@ -1037,7 +1052,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           {onOpenReport && (
             <button
               onClick={onOpenReport}
-              className="flex-1 md:flex-none h-11 px-5 bg-white border border-[#0891b2] text-[#0891b2] hover:bg-[#ecfeff] text-xs font-bold tracking-wider uppercase flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs"
+              className="flex-1 md:flex-none h-11 px-5 bg-white border border-[#0891b2] text-[#0891b2] hover:bg-[#ecfeff] rounded-xl text-xs font-bold tracking-wider uppercase flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs"
             >
               <FileText className="w-4 h-4 text-[#0891b2]" />
               <span>General Executive Report</span>
@@ -1046,7 +1061,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
           <button
             onClick={() => onNavigate('new-collection')}
-            className="flex-1 md:flex-none h-11 px-6 bg-[#0891b2] hover:bg-[#0e7490] text-white text-xs font-bold tracking-wider uppercase flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs"
+            className="flex-1 md:flex-none h-11 px-6 bg-[#0891b2] hover:bg-[#0e7490] text-white rounded-xl text-xs font-bold tracking-wider uppercase flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs"
           >
             <Plus className="w-4 h-4 stroke-[3]" />
             <span>Assign / Start Collection</span>
@@ -1055,93 +1070,112 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       </div>
 
       {/* CEO Executive Summary Bento Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
         {/* Card 1: Balance Lacking / Company Shortfall */}
-        <div className="bg-white border border-[#e5e5e5] border-l-4 border-l-[#ba1a1a] p-5 shadow-xs flex flex-col justify-between">
-          <div className="flex justify-between items-center text-[#595959]">
-            <span className="text-[10px] font-bold tracking-wider uppercase text-[#ba1a1a]">
-              Total Balance Lacking
-            </span>
-            <AlertCircle className="w-5 h-5 text-[#ba1a1a]" />
+        <div className="bg-white border border-rose-200/80 rounded-2xl p-5 shadow-xs hover:shadow-md hover:border-rose-400 flex flex-col justify-between transition-all duration-200 group relative overflow-hidden">
+          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-rose-500 to-red-600" />
+          <div className="flex justify-between items-start">
+            <div>
+              <span className="text-[10px] font-bold tracking-wider uppercase text-rose-600 block">
+                Total Balance Lacking
+              </span>
+              <div className="mt-2 flex items-baseline gap-1.5 flex-wrap">
+                <span className="text-2xl sm:text-3xl font-extrabold text-rose-600 tracking-tight tabular-nums">
+                  {formatXAF(totalCompanyLackingAmount)}
+                </span>
+                <span className="text-xs font-bold text-rose-500 uppercase tracking-wide">FCFA</span>
+              </div>
+            </div>
+            <div className="w-11 h-11 rounded-xl bg-rose-50 border border-rose-100 flex items-center justify-center text-rose-600 group-hover:scale-110 transition-transform shrink-0">
+              <AlertCircle className="w-5 h-5" />
+            </div>
           </div>
 
-          <div className="my-3">
-            <span className="text-3xl font-black text-[#ba1a1a] font-mono">
-              {formatXAF(totalCompanyLackingAmount)}
-            </span>
-            <span className="text-sm font-bold text-[#ba1a1a] ml-2">FCFA</span>
-          </div>
-
-          <div className="text-[11px] text-[#ba1a1a] font-semibold">
+          <div className="text-[11px] text-rose-600 font-semibold pt-3 mt-3 border-t border-rose-100/70">
             Company-wide collection deficit
           </div>
         </div>
 
-        <div className="bg-white border border-[#e5e5e5] border-l-4 border-l-[#0891b2] p-5 shadow-xs flex flex-col justify-between">
-          <div className="flex justify-between items-center text-[#595959]">
-            <span className="text-[10px] font-bold tracking-wider uppercase">
-              Total Settled Volume
-            </span>
-            <Wallet className="w-5 h-5 text-[#0891b2]" />
+        {/* Card 2: Total Settled Volume */}
+        <div className="bg-white border border-slate-200/90 rounded-2xl p-5 shadow-xs hover:shadow-md hover:border-cyan-400 flex flex-col justify-between transition-all duration-200 group relative overflow-hidden">
+          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-[#0891b2] to-cyan-500" />
+          <div className="flex justify-between items-start">
+            <div>
+              <span className="text-[10px] font-bold tracking-wider uppercase text-[#0891b2] block">
+                Total Settled Volume
+              </span>
+              <div className="mt-2 flex items-baseline gap-1.5 flex-wrap">
+                <span className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight tabular-nums">
+                  {formatXAF(totalCompletedAmount)}
+                </span>
+                <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">FCFA</span>
+              </div>
+            </div>
+            <div className="w-11 h-11 rounded-xl bg-cyan-50 border border-cyan-100 flex items-center justify-center text-[#0891b2] group-hover:scale-110 transition-transform shrink-0">
+              <Wallet className="w-5 h-5" />
+            </div>
           </div>
 
-          <div className="my-3">
-            <span className="text-3xl font-black text-[#1a1c1c] font-mono">
-              {formatXAF(totalCompletedAmount)}
-            </span>
-            <span className="text-sm font-bold text-[#595959] ml-2">FCFA</span>
-          </div>
-
-          <div className="text-[11px] text-[#0891b2] font-semibold">
+          <div className="text-[11px] text-[#0891b2] font-semibold pt-3 mt-3 border-t border-slate-100">
             Across all operational field terminals
           </div>
         </div>
 
-        <div className="bg-white border border-[#e5e5e5] border-l-4 border-l-[#ca8a04] p-5 shadow-xs flex flex-col justify-between">
-          <div className="flex justify-between items-center text-[#595959]">
-            <span className="text-[10px] font-bold tracking-wider uppercase">
-              Pending Field Assignments
-            </span>
-            <Clock className="w-5 h-5 text-[#ca8a04]" />
+        {/* Card 3: Pending Field Assignments */}
+        <div className="bg-white border border-amber-200/80 rounded-2xl p-5 shadow-xs hover:shadow-md hover:border-amber-400 flex flex-col justify-between transition-all duration-200 group relative overflow-hidden">
+          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-amber-500 to-yellow-500" />
+          <div className="flex justify-between items-start">
+            <div>
+              <span className="text-[10px] font-bold tracking-wider uppercase text-amber-600 block">
+                Pending Field Jobs
+              </span>
+              <div className="mt-2 flex items-baseline gap-1.5 flex-wrap">
+                <span className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight tabular-nums">
+                  {pendingCount}
+                </span>
+                <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">TASKS</span>
+              </div>
+            </div>
+            <div className="w-11 h-11 rounded-xl bg-amber-50 border border-amber-100 flex items-center justify-center text-amber-600 group-hover:scale-110 transition-transform shrink-0">
+              <Clock className="w-5 h-5" />
+            </div>
           </div>
 
-          <div className="my-3">
-            <span className="text-3xl font-black text-[#1a1c1c] font-mono">
-              {pendingCount}
-            </span>
-            <span className="text-xs font-bold text-[#595959] ml-2">TASKS</span>
-          </div>
-
-          <div className="text-[11px] text-[#ca8a04] font-semibold">
+          <div className="text-[11px] text-amber-700 font-semibold pt-3 mt-3 border-t border-amber-100/70">
             Awaiting collector field completion
           </div>
         </div>
 
-        <div className="bg-white border border-[#e5e5e5] border-l-4 border-l-[#16a34a] p-5 shadow-xs flex flex-col justify-between">
-          <div className="flex justify-between items-center text-[#595959]">
-            <span className="text-[10px] font-bold tracking-wider uppercase">
-              Total Collections Logged
-            </span>
-            <CheckCircle2 className="w-5 h-5 text-[#16a34a]" />
+        {/* Card 4: Total Collections Logged */}
+        <div className="bg-white border border-emerald-200/80 rounded-2xl p-5 shadow-xs hover:shadow-md hover:border-emerald-400 flex flex-col justify-between transition-all duration-200 group relative overflow-hidden">
+          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-[#16a34a] to-emerald-400" />
+          <div className="flex justify-between items-start">
+            <div>
+              <span className="text-[10px] font-bold tracking-wider uppercase text-emerald-700 block">
+                Total Collections Logged
+              </span>
+              <div className="mt-2 flex items-baseline gap-1.5 flex-wrap">
+                <span className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight tabular-nums">
+                  {collections.length}
+                </span>
+                <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">RECORDS</span>
+              </div>
+            </div>
+            <div className="w-11 h-11 rounded-xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600 group-hover:scale-110 transition-transform shrink-0">
+              <CheckCircle2 className="w-5 h-5" />
+            </div>
           </div>
 
-          <div className="my-3">
-            <span className="text-3xl font-black text-[#1a1c1c] font-mono">
-              {collections.length}
-            </span>
-            <span className="text-xs font-bold text-[#595959] ml-2">RECORDS</span>
-          </div>
-
-          <div className="text-[11px] text-[#16a34a] font-semibold">
+          <div className="text-[11px] text-emerald-700 font-semibold pt-3 mt-3 border-t border-emerald-100/70">
             Live audit log synced
           </div>
         </div>
       </div>
 
       {/* CEO Company-wide Collections List */}
-      <div className="bg-white border border-[#e5e5e5] shadow-xs flex flex-col">
-        <div className="p-4 bg-[#f9f9f9] border-b border-[#e5e5e5] flex justify-between items-center">
-          <h3 className="text-sm font-bold text-[#1a1c1c] uppercase tracking-wider">All Company Collections & Live Audit Log</h3>
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-xs flex flex-col overflow-hidden">
+        <div className="p-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
+          <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">All Company Collections & Live Audit Log</h3>
           <button
             onClick={() => onNavigate('history')}
             className="text-[#0891b2] text-xs font-bold tracking-wider uppercase hover:underline flex items-center gap-1 cursor-pointer"
@@ -1154,7 +1188,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="bg-[#2f3131] text-white text-[10px] font-bold uppercase tracking-wider">
+              <tr className="bg-slate-800 text-white text-[10px] font-bold uppercase tracking-wider">
                 <th className="p-3.5">ID / Time</th>
                 <th className="p-3.5">Client Name</th>
                 <th className="p-3.5">Amount (FCFA)</th>
@@ -1163,28 +1197,28 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <th className="p-3.5 text-right">Status</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#e5e5e5] text-xs font-medium text-[#1a1c1c]">
+            <tbody className="divide-y divide-slate-100 text-xs font-medium text-slate-900">
               {collections.slice(0, 10).map((col) => (
                 <tr
                   key={col.id}
                   onClick={() => setSelectedJobDetails(col)}
-                  className="hover:bg-[#f9f9f9] transition-colors cursor-pointer"
+                  className="hover:bg-slate-50 transition-colors cursor-pointer"
                 >
                   <td className="p-3.5">
                     <p className="font-mono font-bold text-[#0891b2]">{col.id}</p>
-                    <p className="text-[10px] text-[#595959]">{col.time}</p>
+                    <p className="text-[10px] text-slate-500 font-mono">{col.time}</p>
                   </td>
-                  <td className="p-3.5 font-bold text-[#1a1c1c]">{col.clientName}</td>
-                  <td className="p-3.5 font-mono font-bold text-[#1a1c1c]">{formatXAF(col.amount)} FCFA</td>
-                  <td className="p-3.5 font-semibold text-[#595959]">{col.assignedCollectorName || 'Field Agent'}</td>
-                  <td className="p-3.5 text-[#595959]">{col.depositDestination || 'Cash Collection'}</td>
+                  <td className="p-3.5 font-bold text-slate-900">{col.clientName}</td>
+                  <td className="p-3.5 font-mono font-bold text-slate-900">{formatXAF(col.amount)} FCFA</td>
+                  <td className="p-3.5 font-semibold text-slate-600">{col.assignedCollectorName || 'Field Agent'}</td>
+                  <td className="p-3.5 text-slate-600">{col.depositDestination || 'Cash Collection'}</td>
                   <td className="p-3.5 text-right">
-                    <span className={`px-2.5 py-0.5 text-[9px] font-extrabold uppercase tracking-wider border ${
+                    <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border ${
                       col.status === 'COMPLETE'
-                        ? 'bg-[#dcfce7] text-[#166534] border-[#86efac]'
+                        ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
                         : col.status === 'CANCELLED'
-                        ? 'bg-[#fee2e2] text-[#991b1b] border-[#fca5a5]'
-                        : 'bg-[#fef9c3] text-[#854d0e] border-[#fef08a]'
+                        ? 'bg-rose-50 text-rose-800 border-rose-200'
+                        : 'bg-amber-50 text-amber-800 border-amber-200'
                     }`}>
                       {col.status}
                     </span>
@@ -1194,7 +1228,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
               {collections.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="p-8 text-center text-xs text-[#595959]">
+                  <td colSpan={6} className="p-12 text-center text-xs text-slate-500">
                     No collections recorded yet.
                   </td>
                 </tr>
@@ -1206,3 +1240,4 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     </div>
   );
 };
+;

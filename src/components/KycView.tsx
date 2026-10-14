@@ -18,10 +18,9 @@ interface KycViewProps {
   user: CollectorUser;
   onShowToast: (msg: string, type?: 'success' | 'info' | 'error') => void;
   onAutoCreateClient?: (submission: KycSubmission) => void;
-  onOpenClientKycPortal?: () => void;
 }
 
-export const KycView: React.FC<KycViewProps> = ({ user, onShowToast, onAutoCreateClient, onOpenClientKycPortal }) => {
+export const KycView: React.FC<KycViewProps> = ({ user, onShowToast, onAutoCreateClient }) => {
   const [submissions, setSubmissions] = useState<KycSubmission[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -320,15 +319,6 @@ export const KycView: React.FC<KycViewProps> = ({ user, onShowToast, onAutoCreat
         </div>
 
         <div className="flex items-center gap-2">
-          {onOpenClientKycPortal && (
-            <button
-              onClick={onOpenClientKycPortal}
-              className="px-4 py-2 bg-[#001f5b] hover:bg-[#001744] text-white text-xs font-bold uppercase tracking-wider flex items-center gap-2 transition-colors cursor-pointer shadow-sm rounded-none"
-            >
-              <FileText className="w-4 h-4" />
-              <span>New Client KYC Form</span>
-            </button>
-          )}
           <button
             onClick={loadKyc}
             disabled={loading}
