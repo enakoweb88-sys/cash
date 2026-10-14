@@ -309,16 +309,18 @@ export async function settleRemoteTransaction(id: string, charges?: number): Pro
   }
 }
 
-export async function ensureAdminToken(): Promise<string | null> {
+export async function ensureAdminToken(forceRefresh = false): Promise<string | null> {
   let token: string | null = null;
-  try {
-    token =
-      sessionStorage.getItem('enako_access_token') ||
-      localStorage.getItem('enako_access_token') ||
-      localStorage.getItem('access_token');
-  } catch (e) {}
+  if (!forceRefresh) {
+    try {
+      token =
+        sessionStorage.getItem('enako_access_token') ||
+        localStorage.getItem('enako_access_token') ||
+        localStorage.getItem('access_token');
+    } catch (e) {}
 
-  if (token) return token;
+    if (token) return token;
+  }
 
   try {
     const res = await fetch(`${API_BASE_URL}/auth/login`, {
@@ -374,29 +376,53 @@ export async function fetchRemoteKycSubmissions(params?: {
   if (params?.search) q.append('search', params.search);
   if (params?.limit) q.append('limit', String(params.limit || 100));
 
-  const headers = getAuthHeaders();
+  let headers = getAuthHeaders();
   let remoteData: any[] = [];
 
-  const endpoints = [
-    `${API_BASE_URL}/kyc/submissions?${q.toString()}`,
-    `${API_BASE_URL}/users/kyc/requests?${q.toString()}`,
-    `${API_BASE_URL}/kyc?${q.toString()}`,
-    `${API_BASE_URL}/users?${q.toString()}`,
-  ];
-
-  for (const endpoint of endpoints) {
-    try {
-      const res = await fetch(endpoint, { headers });
-      if (res.ok) {
-        const data = await res.json();
-        const items = Array.isArray(data) ? data : (data.items || data.users || data.data || []);
-        if (items && items.length > 0) {
-          remoteData = items;
-          break; // Real database records fetched
-        }
+  const mainEndpoint = `${API_BASE_URL}/kyc/submissions?${q.toString()}`;
+  try {
+    let res = await fetch(mainEndpoint, { headers });
+    // If 401 or 403, refresh CEO token and retry immediately
+    if (res.status === 401 || res.status === 403) {
+      const freshToken = await ensureAdminToken(true);
+      if (freshToken) {
+        headers = { ...headers, Authorization: `Bearer ${freshToken}` };
+        res = await fetch(mainEndpoint, { headers });
       }
-    } catch (err) {
-      console.warn(`Backend fetch notice for ${endpoint}:`, err);
+    }
+    if (res.ok) {
+      const data = await res.json();
+      const items = Array.isArray(data) ? data : (data.items || data.users || data.data || []);
+      if (items && items.length > 0) {
+        remoteData = items;
+      }
+    }
+  } catch (err) {
+    console.warn(`Backend fetch notice for ${mainEndpoint}:`, err);
+  }
+
+  // Fallback checks if primary endpoint yielded nothing
+  if (remoteData.length === 0) {
+    const fallbackEndpoints = [
+      `${API_BASE_URL}/users/kyc/requests?${q.toString()}`,
+      `${API_BASE_URL}/kyc?${q.toString()}`,
+      `${API_BASE_URL}/users?${q.toString()}`,
+    ];
+
+    for (const endpoint of fallbackEndpoints) {
+      try {
+        const res = await fetch(endpoint, { headers });
+        if (res.ok) {
+          const data = await res.json();
+          const items = Array.isArray(data) ? data : (data.items || data.users || data.data || []);
+          if (items && items.length > 0) {
+            remoteData = items;
+            break;
+          }
+        }
+      } catch (err) {
+        console.warn(`Backend fetch notice for ${endpoint}:`, err);
+      }
     }
   }
 

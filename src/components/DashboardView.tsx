@@ -29,7 +29,7 @@ import {
 } from 'lucide-react';
 import { Collection, ViewType, CollectorUser } from '../types';
 import { formatXAF, INITIAL_USER } from '../data/mockData';
-import { downloadReceiptPDF } from '../utils/exportUtils';
+import { downloadReceiptPDF, downloadDailyReportPDF } from '../utils/exportUtils';
 
 interface DashboardViewProps {
   collections: Collection[];
@@ -52,6 +52,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 }) => {
   const isCeoOrManager = user?.role === 'CEO / Senior Manager' || user?.email === 'ceo@enako.com' || user?.role === 'CEO' || user?.role === 'Senior Manager' || user?.role === 'Branch Operations Lead';
   const firstName = user?.name ? user.name.trim().split(' ')[0] : 'Collector';
+
+  // Helper to check if a collection was logged today (daily transactions)
+  const isToday = (ts?: string | number | Date) => {
+    if (!ts) return false;
+    const d = new Date(ts);
+    const now = new Date();
+    return (
+      d.getFullYear() === now.getFullYear() &&
+      d.getMonth() === now.getMonth() &&
+      d.getDate() === now.getDate()
+    );
+  };
 
   // State for Field Collector tab view ('available' vs 'settled' vs 'lacking')
   const [collectorTab, setCollectorTab] = useState<'available' | 'settled' | 'lacking'>('available');
@@ -92,17 +104,36 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     );
   });
 
-  const availableJobs = collectorCollections.filter((c) => c.status === 'PENDING');
-  const settledJobs = collectorCollections.filter((c) => c.status === 'COMPLETE');
+  // DAILY TRANSACTIONS ONLY vs ALL ACTIVE TOGGLE
+  // Default to today if today has records; otherwise fallback to 'all' so users don't see a blank 0-metric screen
+  const hasTodayCollections = collections.some((c) => isToday(c.timestamp));
+  const [timeframeMode, setTimeframeMode] = useState<'today' | 'all'>(() => (hasTodayCollections ? 'today' : 'all'));
 
-  // Lacking / Deficit Jobs (only jobs where an actual shortfall was recorded)
-  const lackingJobs = collectorCollections.filter((c) => {
+  const dailyCollectorCollections = collectorCollections.filter((c) => isToday(c.timestamp));
+  const dailyCompanyCollections = collections.filter((c) => isToday(c.timestamp));
+
+  // Collections displayed on the dashboard according to active timeframe mode
+  const activeCollectorCollections = timeframeMode === 'today' ? dailyCollectorCollections : collectorCollections;
+  const activeCompanyCollections = timeframeMode === 'today' ? dailyCompanyCollections : collections;
+
+  const availableJobs = activeCollectorCollections.filter((c) => c.status === 'PENDING');
+  const settledJobs = activeCollectorCollections.filter((c) => c.status === 'COMPLETE');
+
+  // Lacking / Deficit Jobs (jobs where an actual shortfall was recorded)
+  const lackingJobs = activeCollectorCollections.filter((c) => {
     return Boolean(c.shortageAmount && Number(c.shortageAmount) > 0);
   });
 
   const totalLackingAmount = lackingJobs.reduce((sum, c) => {
     return sum + Number(c.shortageAmount || 0);
   }, 0);
+
+  const totalPendingAmount = availableJobs.reduce((sum, c) => {
+    return sum + Number(c.targetAmount || c.amount || 0);
+  }, 0);
+
+  // Total Outstanding Balance for Collector = Deficit on completed + uncollected pending
+  const totalCollectorOutstanding = totalLackingAmount + totalPendingAmount;
 
   const totalActualCollected = settledJobs.reduce((sum, c) => {
     const actual = c.actualAmountCollected !== undefined 
@@ -111,8 +142,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     return sum + actual;
   }, 0);
 
-  // CEO / Executive Totals
-  const totalCompletedAmount = collections
+  // CEO / Executive Daily or All-Time Totals
+  const totalCompletedAmount = activeCompanyCollections
     .filter((c) => c.status === 'COMPLETE')
     .reduce((sum, c) => {
       const actual = c.actualAmountCollected !== undefined 
@@ -121,11 +152,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       return sum + actual;
     }, 0);
 
-  const totalCompanyLackingAmount = collections.reduce((sum, c) => {
+  const totalCompanyLackingAmount = activeCompanyCollections.reduce((sum, c) => {
     return sum + (c.shortageAmount && Number(c.shortageAmount) > 0 ? Number(c.shortageAmount) : 0);
   }, 0);
 
-  const pendingCount = collections.filter((c) => c.status === 'PENDING').length;
+  const totalCompanyPendingAmount = activeCompanyCollections
+    .filter((c) => c.status === 'PENDING')
+    .reduce((sum, c) => sum + Number(c.targetAmount || c.amount || 0), 0);
+
+  const totalCompanyOutstanding = totalCompanyLackingAmount + totalCompanyPendingAmount;
+
+  const pendingCount = activeCompanyCollections.filter((c) => c.status === 'PENDING').length;
 
   // DEDICATED JOB DETAILS SPECIFICATIONS PAGE (NO POPUP MODAL)
   if (selectedJobDetails) {
@@ -557,9 +594,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
             <div className="flex items-center gap-2 text-[10px] font-bold text-[#0891b2] uppercase tracking-widest">
-              <span>Field Operations</span>
+              <span>Daily Field Operations</span>
               <span>/</span>
-              <span>Collector Terminal</span>
+              <span>{new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' })}</span>
             </div>
             <h2 className="text-2xl font-bold tracking-tight text-slate-900 mt-1">
               Welcome, {firstName}
@@ -569,14 +606,24 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </p>
           </div>
 
-          <div className="flex items-center gap-2.5 w-full md:w-auto">
+          <div className="flex items-center gap-2.5 w-full md:w-auto flex-wrap">
+            {/* Download Daily PDF Report Button */}
+            <button
+              onClick={() => downloadDailyReportPDF(dailyCollectorCollections, user || INITIAL_USER, new Date())}
+              className="flex-1 md:flex-none px-4 py-2.5 bg-white border border-[#0891b2] text-[#0891b2] hover:bg-[#ecfeff] rounded-xl text-xs font-bold tracking-wider uppercase flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs"
+              title="Download PDF report for today's daily transactions"
+            >
+              <Download className="w-4 h-4 text-[#0891b2]" />
+              <span>Download Daily PDF</span>
+            </button>
+
             {onOpenReport && (
               <button
                 onClick={onOpenReport}
-                className="flex-1 md:flex-none px-4 py-2.5 bg-white border border-[#0891b2] text-[#0891b2] hover:bg-[#ecfeff] rounded-xl text-xs font-bold tracking-wider uppercase flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs"
+                className="flex-1 md:flex-none px-4 py-2.5 bg-slate-50 border border-slate-300 text-slate-700 hover:bg-slate-100 rounded-xl text-xs font-bold tracking-wider uppercase flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs"
               >
-                <FileText className="w-4 h-4 text-[#0891b2]" />
-                <span>Generate Report</span>
+                <FileText className="w-4 h-4 text-slate-600" />
+                <span>Custom Report</span>
               </button>
             )}
 
@@ -590,9 +637,67 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         </div>
 
-        {/* Operation Metrics Cards (Deficit, Volume, Tasks) */}
+        {/* Timeframe Switcher & History Notice */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-white p-3.5 rounded-xl border border-slate-200">
+          <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg">
+            <button
+              type="button"
+              onClick={() => setTimeframeMode('today')}
+              className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all cursor-pointer ${
+                timeframeMode === 'today'
+                  ? 'bg-white text-[#0891b2] shadow-2xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              Today's Queue ({dailyCollectorCollections.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setTimeframeMode('all')}
+              className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all cursor-pointer ${
+                timeframeMode === 'all'
+                  ? 'bg-white text-[#0891b2] shadow-2xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              All Active ({collectorCollections.length})
+            </button>
+          </div>
+
+          <div className="flex items-center gap-2 text-xs">
+            <span className="text-slate-500">
+              {timeframeMode === 'today'
+                ? `Filtering exclusively to today (${dailyCollectorCollections.length} entries)`
+                : `Showing all ${collectorCollections.length} active collection records`}
+            </span>
+            <button
+              onClick={() => onNavigate('history')}
+              className="font-bold text-[#0891b2] hover:underline flex items-center gap-1 cursor-pointer shrink-0 ml-1"
+            >
+              <span>Full History Ledger</span>
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+
+        {timeframeMode === 'today' && dailyCollectorCollections.length === 0 && (
+          <div className="bg-amber-50 border border-amber-200 px-4 py-3 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-amber-900">
+            <div className="flex items-center gap-2">
+              <Info className="w-4 h-4 text-amber-600 shrink-0" />
+              <span>No collections logged yet for today. Switch to <strong>All Active ({collectorCollections.length})</strong> to inspect earlier active collections.</span>
+            </div>
+            <button
+              onClick={() => setTimeframeMode('all')}
+              className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-bold text-xs cursor-pointer shadow-xs shrink-0"
+            >
+              View All Active Records
+            </button>
+          </div>
+        )}
+
+        {/* Operation Metrics Cards (Outstanding Balance, Volume, Tasks) */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
-          {/* Card 1: Outstanding Shortfall / Balance Lacking Card */}
+          {/* Card 1: Today's Outstanding Balance Card */}
           <div 
             onClick={() => setCollectorTab('lacking')}
             className="bg-white border border-rose-200/80 rounded-2xl p-5 shadow-xs hover:shadow-md hover:border-rose-400 flex flex-col justify-between cursor-pointer transition-all duration-200 group relative overflow-hidden"
@@ -601,11 +706,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <div className="flex justify-between items-start">
               <div>
                 <span className="text-[10px] font-bold tracking-wider uppercase text-rose-600 block">
-                  Balance Lacking / Shortfall
+                  Today's Outstanding Balance
                 </span>
                 <div className="mt-2 flex items-baseline gap-1.5 flex-wrap">
                   <span className="text-2xl sm:text-3xl font-extrabold text-rose-600 tracking-tight tabular-nums">
-                    {formatXAF(totalLackingAmount)}
+                    {formatXAF(totalCollectorOutstanding)}
                   </span>
                   <span className="text-xs font-bold text-rose-500 uppercase tracking-wide">FCFA</span>
                 </div>
@@ -616,21 +721,23 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
 
             <div className="flex items-center justify-between text-xs pt-3 mt-3 border-t border-rose-100/70">
-              <span className="text-slate-500 font-medium">{lackingJobs.length} transactions with deficit</span>
+              <span className="text-slate-500 font-medium">
+                {totalLackingAmount > 0 ? `${formatXAF(totalLackingAmount)} FCFA deficit` : '0 FCFA deficit'} · {availableJobs.length} pending
+              </span>
               <span className="font-bold text-rose-600 group-hover:translate-x-0.5 transition-transform flex items-center gap-1">
-                <span>View All</span>
+                <span>View Queue</span>
                 <ChevronRight className="w-3.5 h-3.5" />
               </span>
             </div>
           </div>
 
-          {/* Card 2: Total Collected Volume */}
+          {/* Card 2: Today's Collected Volume */}
           <div className="bg-white border border-slate-200/90 rounded-2xl p-5 shadow-xs hover:shadow-md hover:border-cyan-400 flex flex-col justify-between transition-all duration-200 group relative overflow-hidden">
             <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-[#0891b2] to-cyan-500" />
             <div className="flex justify-between items-start">
               <div>
                 <span className="text-[10px] font-bold tracking-wider uppercase text-[#0891b2] block">
-                  Total Received Volume
+                  Today's Received Volume
                 </span>
                 <div className="mt-2 flex items-baseline gap-1.5 flex-wrap">
                   <span className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight tabular-nums">
@@ -645,12 +752,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
 
             <div className="flex items-center justify-between text-xs pt-3 mt-3 border-t border-slate-100">
-              <span className="text-slate-500 font-medium">{settledJobs.length} completed settlements</span>
+              <span className="text-slate-500 font-medium">{settledJobs.length} completed settlements today</span>
               <span className="text-xs font-bold text-[#0891b2]">100% Synced</span>
             </div>
           </div>
 
-          {/* Card 3: Pending Tasks */}
+          {/* Card 3: Today's Pending Tasks */}
           <div 
             onClick={() => setCollectorTab('available')}
             className="bg-white border border-amber-200/80 rounded-2xl p-5 shadow-xs hover:shadow-md hover:border-amber-400 flex flex-col justify-between cursor-pointer transition-all duration-200 group relative overflow-hidden"
@@ -659,7 +766,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <div className="flex justify-between items-start">
               <div>
                 <span className="text-[10px] font-bold tracking-wider uppercase text-amber-600 block">
-                  Pending Field Jobs
+                  Today's Pending Jobs
                 </span>
                 <div className="mt-2 flex items-baseline gap-1.5 flex-wrap">
                   <span className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight tabular-nums">
@@ -674,7 +781,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
 
             <div className="flex items-center justify-between text-xs pt-3 mt-3 border-t border-amber-100/70">
-              <span className="text-amber-700 font-medium">Awaiting on-site collection</span>
+              <span className="text-amber-700 font-medium">Awaiting collection today</span>
               <span className="font-bold text-amber-700 group-hover:translate-x-0.5 transition-transform flex items-center gap-1">
                 <span>View Queue</span>
                 <ChevronRight className="w-3.5 h-3.5" />
@@ -1038,24 +1145,34 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <div className="flex items-center gap-2 text-[10px] font-bold text-[#0891b2] uppercase tracking-widest">
             <span>Executive Overview</span>
             <span>/</span>
-            <span>Management Console</span>
+            <span>Daily Operations ({new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' })})</span>
           </div>
           <h2 className="text-2xl font-bold tracking-tight text-slate-900 mt-1">
             Welcome, {firstName} (CEO)
           </h2>
           <p className="text-xs text-slate-500 mt-0.5">
-            Real-time multi-branch cash collection & liquidity operations status.
+            Real-time daily cash collection & liquidity operations console.
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5 w-full md:w-auto">
+        <div className="flex items-center gap-2.5 w-full md:w-auto flex-wrap">
+          {/* Download Daily PDF Report Button for CEO */}
+          <button
+            onClick={() => downloadDailyReportPDF(dailyCompanyCollections, user || INITIAL_USER, new Date())}
+            className="flex-1 md:flex-none h-11 px-5 bg-white border border-[#0891b2] text-[#0891b2] hover:bg-[#ecfeff] rounded-xl text-xs font-bold tracking-wider uppercase flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs"
+            title="Download PDF report for today's daily transactions"
+          >
+            <Download className="w-4 h-4 text-[#0891b2]" />
+            <span>Download Daily PDF</span>
+          </button>
+
           {onOpenReport && (
             <button
               onClick={onOpenReport}
-              className="flex-1 md:flex-none h-11 px-5 bg-white border border-[#0891b2] text-[#0891b2] hover:bg-[#ecfeff] rounded-xl text-xs font-bold tracking-wider uppercase flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs"
+              className="flex-1 md:flex-none h-11 px-5 bg-slate-50 border border-slate-300 text-slate-700 hover:bg-slate-100 rounded-xl text-xs font-bold tracking-wider uppercase flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs"
             >
-              <FileText className="w-4 h-4 text-[#0891b2]" />
-              <span>General Executive Report</span>
+              <FileText className="w-4 h-4 text-slate-600" />
+              <span>Custom Report</span>
             </button>
           )}
 
@@ -1069,19 +1186,77 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
       </div>
 
+      {/* Timeframe Switcher & History Notice */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-white p-3.5 rounded-xl border border-slate-200">
+        <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg">
+          <button
+            type="button"
+            onClick={() => setTimeframeMode('today')}
+            className={`px-3.5 py-1.5 rounded-md text-xs font-bold transition-all cursor-pointer ${
+              timeframeMode === 'today'
+                ? 'bg-white text-[#0891b2] shadow-2xs'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            Today's Queue ({dailyCompanyCollections.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setTimeframeMode('all')}
+            className={`px-3.5 py-1.5 rounded-md text-xs font-bold transition-all cursor-pointer ${
+              timeframeMode === 'all'
+                ? 'bg-white text-[#0891b2] shadow-2xs'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            All System Records ({collections.length})
+          </button>
+        </div>
+
+        <div className="flex items-center gap-2 text-xs">
+          <span className="text-slate-500">
+            {timeframeMode === 'today'
+              ? `Filtering strictly to today's activity (${dailyCompanyCollections.length} records)`
+              : `Viewing company-wide volume (${collections.length} total records)`}
+          </span>
+          <button
+            onClick={() => onNavigate('history')}
+            className="font-bold text-[#0891b2] hover:underline flex items-center gap-1 cursor-pointer shrink-0 ml-1"
+          >
+            <span>Full Multi-Month History</span>
+            <ChevronRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </div>
+
+      {timeframeMode === 'today' && dailyCompanyCollections.length === 0 && (
+        <div className="bg-amber-50 border border-amber-200 px-4 py-3 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-amber-900">
+          <div className="flex items-center gap-2">
+            <Info className="w-4 h-4 text-amber-600 shrink-0" />
+            <span>No collections logged yet for today. Displaying 0 entries for today. Switch to <strong>All System Records ({collections.length})</strong> to view all active operational data.</span>
+          </div>
+          <button
+            onClick={() => setTimeframeMode('all')}
+            className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-bold text-xs cursor-pointer shadow-xs shrink-0"
+          >
+            Show All Active Data
+          </button>
+        </div>
+      )}
+
       {/* CEO Executive Summary Bento Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-        {/* Card 1: Balance Lacking / Company Shortfall */}
+        {/* Card 1: Today's Outstanding Balance / Company Shortfall */}
         <div className="bg-white border border-rose-200/80 rounded-2xl p-5 shadow-xs hover:shadow-md hover:border-rose-400 flex flex-col justify-between transition-all duration-200 group relative overflow-hidden">
           <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-rose-500 to-red-600" />
           <div className="flex justify-between items-start">
             <div>
               <span className="text-[10px] font-bold tracking-wider uppercase text-rose-600 block">
-                Total Balance Lacking
+                Total Outstanding Balance (Today)
               </span>
               <div className="mt-2 flex items-baseline gap-1.5 flex-wrap">
                 <span className="text-2xl sm:text-3xl font-extrabold text-rose-600 tracking-tight tabular-nums">
-                  {formatXAF(totalCompanyLackingAmount)}
+                  {formatXAF(totalCompanyOutstanding)}
                 </span>
                 <span className="text-xs font-bold text-rose-500 uppercase tracking-wide">FCFA</span>
               </div>
@@ -1092,17 +1267,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
 
           <div className="text-[11px] text-rose-600 font-semibold pt-3 mt-3 border-t border-rose-100/70">
-            Company-wide collection deficit
+            {totalCompanyLackingAmount > 0 ? `${formatXAF(totalCompanyLackingAmount)} FCFA deficit` : '0 FCFA deficit'} · {pendingCount} pending tasks
           </div>
         </div>
 
-        {/* Card 2: Total Settled Volume */}
+        {/* Card 2: Total Settled Today */}
         <div className="bg-white border border-slate-200/90 rounded-2xl p-5 shadow-xs hover:shadow-md hover:border-cyan-400 flex flex-col justify-between transition-all duration-200 group relative overflow-hidden">
           <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-[#0891b2] to-cyan-500" />
           <div className="flex justify-between items-start">
             <div>
               <span className="text-[10px] font-bold tracking-wider uppercase text-[#0891b2] block">
-                Total Settled Volume
+                Total Settled (Today)
               </span>
               <div className="mt-2 flex items-baseline gap-1.5 flex-wrap">
                 <span className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight tabular-nums">
@@ -1117,17 +1292,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
 
           <div className="text-[11px] text-[#0891b2] font-semibold pt-3 mt-3 border-t border-slate-100">
-            Across all operational field terminals
+            Across today's completed field settlements
           </div>
         </div>
 
-        {/* Card 3: Pending Field Assignments */}
+        {/* Card 3: Pending Field Assignments Today */}
         <div className="bg-white border border-amber-200/80 rounded-2xl p-5 shadow-xs hover:shadow-md hover:border-amber-400 flex flex-col justify-between transition-all duration-200 group relative overflow-hidden">
           <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-amber-500 to-yellow-500" />
           <div className="flex justify-between items-start">
             <div>
               <span className="text-[10px] font-bold tracking-wider uppercase text-amber-600 block">
-                Pending Field Jobs
+                Today's Pending Jobs
               </span>
               <div className="mt-2 flex items-baseline gap-1.5 flex-wrap">
                 <span className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight tabular-nums">
@@ -1142,21 +1317,21 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
 
           <div className="text-[11px] text-amber-700 font-semibold pt-3 mt-3 border-t border-amber-100/70">
-            Awaiting collector field completion
+            Awaiting today's field collection
           </div>
         </div>
 
-        {/* Card 4: Total Collections Logged */}
+        {/* Card 4: Total Daily Collections Logged */}
         <div className="bg-white border border-emerald-200/80 rounded-2xl p-5 shadow-xs hover:shadow-md hover:border-emerald-400 flex flex-col justify-between transition-all duration-200 group relative overflow-hidden">
           <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-[#16a34a] to-emerald-400" />
           <div className="flex justify-between items-start">
             <div>
               <span className="text-[10px] font-bold tracking-wider uppercase text-emerald-700 block">
-                Total Collections Logged
+                Today's Queue Size
               </span>
               <div className="mt-2 flex items-baseline gap-1.5 flex-wrap">
                 <span className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight tabular-nums">
-                  {collections.length}
+                  {dailyCompanyCollections.length}
                 </span>
                 <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">RECORDS</span>
               </div>
@@ -1167,20 +1342,25 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
 
           <div className="text-[11px] text-emerald-700 font-semibold pt-3 mt-3 border-t border-emerald-100/70">
-            Live audit log synced
+            Live audit log synced for today
           </div>
         </div>
       </div>
 
-      {/* CEO Company-wide Collections List */}
+      {/* CEO Company-wide Collections List (Strictly Today's Queue) */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-xs flex flex-col overflow-hidden">
         <div className="p-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
-          <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">All Company Collections & Live Audit Log</h3>
+          <div className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-[#16a34a]" />
+            <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
+              Today's Collections & Live Operational Queue ({dailyCompanyCollections.length} records today)
+            </h3>
+          </div>
           <button
             onClick={() => onNavigate('history')}
             className="text-[#0891b2] text-xs font-bold tracking-wider uppercase hover:underline flex items-center gap-1 cursor-pointer"
           >
-            <span>View Full Audit History</span>
+            <span>View Full Multi-Month History</span>
             <ChevronRight className="w-4 h-4" />
           </button>
         </div>
@@ -1198,7 +1378,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-xs font-medium text-slate-900">
-              {collections.slice(0, 10).map((col) => (
+              {dailyCompanyCollections.map((col) => (
                 <tr
                   key={col.id}
                   onClick={() => setSelectedJobDetails(col)}
@@ -1226,10 +1406,20 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 </tr>
               ))}
 
-              {collections.length === 0 && (
+              {dailyCompanyCollections.length === 0 && (
                 <tr>
                   <td colSpan={6} className="p-12 text-center text-xs text-slate-500">
-                    No collections recorded yet.
+                    <div className="max-w-sm mx-auto space-y-2">
+                      <p className="text-sm font-bold text-slate-800">No collections recorded for today yet.</p>
+                      <p className="text-slate-500">Use "Assign / Start Collection" to record today's tasks, or click below to browse the historical ledger.</p>
+                      <button
+                        onClick={() => onNavigate('history')}
+                        className="inline-flex items-center gap-1.5 text-xs font-bold text-[#0891b2] hover:underline pt-2 cursor-pointer"
+                      >
+                        <span>Open Full Transaction History</span>
+                        <ChevronRight className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               )}

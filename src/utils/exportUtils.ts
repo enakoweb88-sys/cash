@@ -11,6 +11,8 @@ export interface ReportMetrics {
   startDateStr: string;
   endDateStr: string;
   totalCollected: number;
+  totalOutstanding: number;
+  totalTarget: number;
   totalPending: number;
   totalAttempted: number;
   completedCount: number;
@@ -69,7 +71,48 @@ export function filterCollectionsByPeriod(
 }
 
 /**
- * Compute executive calculations for leadership
+ * Filter collections by a specific single day (for daily reports)
+ */
+export function filterCollectionsByDay(
+  collections: Collection[],
+  referenceDate: Date | string = new Date()
+): { filtered: Collection[]; periodLabel: string; start: Date; end: Date } {
+  const ref = new Date(referenceDate);
+  const start = new Date(ref.getFullYear(), ref.getMonth(), ref.getDate(), 0, 0, 0, 0);
+  const end = new Date(ref.getFullYear(), ref.getMonth(), ref.getDate(), 23, 59, 59, 999);
+  const periodLabel = `Daily Report (${ref.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })})`;
+
+  const filtered = collections.filter((item) => {
+    const itemDate = new Date(item.timestamp || Date.now());
+    return itemDate >= start && itemDate <= end;
+  });
+
+  return { filtered, periodLabel, start, end };
+}
+
+/**
+ * Filter collections by a specific month and year (for monthly reports)
+ */
+export function filterCollectionsByMonth(
+  collections: Collection[],
+  year: number = new Date().getFullYear(),
+  month: number = new Date().getMonth() // 0-indexed
+): { filtered: Collection[]; periodLabel: string; start: Date; end: Date } {
+  const start = new Date(year, month, 1, 0, 0, 0, 0);
+  const end = new Date(year, month + 1, 0, 23, 59, 59, 999);
+  const monthName = start.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+  const periodLabel = `Monthly Report (${monthName})`;
+
+  const filtered = collections.filter((item) => {
+    const itemDate = new Date(item.timestamp || Date.now());
+    return itemDate >= start && itemDate <= end;
+  });
+
+  return { filtered, periodLabel, start, end };
+}
+
+/**
+ * Compute executive calculations for leadership with full outstanding balance breakdown
  */
 export function calculateReportMetrics(
   collections: Collection[],
@@ -82,8 +125,32 @@ export function calculateReportMetrics(
   const completed = collections.filter((c) => c.status === 'COMPLETE');
   const pending = collections.filter((c) => c.status === 'PENDING');
   const cancelled = collections.filter((c) => c.status === 'CANCELLED');
-  const totalCollected = completed.reduce((acc, c) => acc + c.amount, 0);
-  const totalPending = pending.reduce((acc, c) => acc + c.amount, 0);
+
+  const totalCollected = completed.reduce((acc, c) => {
+    const actual = c.actualAmountCollected !== undefined 
+      ? Number(c.actualAmountCollected) 
+      : Number(c.amount || 0);
+    return acc + actual;
+  }, 0);
+
+  const totalTarget = collections.reduce((acc, c) => {
+    return acc + Number(c.targetAmount || c.amount || 0);
+  }, 0);
+
+  const totalOutstanding = collections.reduce((acc, c) => {
+    const target = Number(c.targetAmount || c.amount || 0);
+    if (c.status === 'COMPLETE') {
+      const actual = c.actualAmountCollected !== undefined ? Number(c.actualAmountCollected) : Number(c.amount || 0);
+      const shortage = c.shortageAmount !== undefined ? Number(c.shortageAmount) : Math.max(0, target - actual);
+      return acc + shortage;
+    }
+    if (c.status === 'PENDING') {
+      return acc + target;
+    }
+    return acc;
+  }, 0);
+
+  const totalPending = pending.reduce((acc, c) => acc + (c.targetAmount || c.amount || 0), 0);
   const pendingSyncTotal = 0;
 
   const totalAttempted = collections.length;
@@ -96,7 +163,7 @@ export function calculateReportMetrics(
     if (!clientTotals[c.clientId]) {
       clientTotals[c.clientId] = { name: c.clientName, amount: 0 };
     }
-    clientTotals[c.clientId].amount += c.amount;
+    clientTotals[c.clientId].amount += (c.actualAmountCollected !== undefined ? c.actualAmountCollected : c.amount);
   });
 
   let topClient: { name: string; amount: number } | null = null;
@@ -120,7 +187,7 @@ export function calculateReportMetrics(
     if (!sectorMap[sector]) {
       sectorMap[sector] = { amount: 0, count: 0 };
     }
-    sectorMap[sector].amount += c.amount;
+    sectorMap[sector].amount += (c.actualAmountCollected !== undefined ? c.actualAmountCollected : c.amount);
     sectorMap[sector].count += 1;
   });
 
@@ -144,7 +211,7 @@ export function calculateReportMetrics(
     if (!dailyMap[d]) {
       dailyMap[d] = { amount: 0, count: 0 };
     }
-    dailyMap[d].amount += c.amount;
+    dailyMap[d].amount += (c.actualAmountCollected !== undefined ? c.actualAmountCollected : c.amount);
     dailyMap[d].count += 1;
   });
 
@@ -154,18 +221,22 @@ export function calculateReportMetrics(
     count: data.count,
   }));
 
-  // Auto-generate clear executive explanation for the leadership
+  // Auto-generate clear executive explanation for leadership
   const topSector = sectorBreakdown[0]?.sector || 'Douala Commercial Sector';
   const topSectorPct = sectorBreakdown[0]?.percentage || 0;
   const bossExecutiveSummary = `EXECUTIVE SUMMARY: Total cash collected and settled during this period is ${formatXAF(
     totalCollected
   )} FCFA across ${completed.length} completed settlements (${successRate.toFixed(
     1
-  )}% recovery efficiency). Pending collections awaiting field collection total ${formatXAF(
-    totalPending
-  )} FCFA across ${pending.length} tasks. The average collection ticket size is ${formatXAF(
+  )}% recovery efficiency). Total outstanding balance across uncollected tasks and partial deficits is ${formatXAF(
+    totalOutstanding
+  )} FCFA. Total target transacted volume is ${formatXAF(
+    totalTarget
+  )} FCFA with an average ticket size of ${formatXAF(
     Math.round(avgTicketSize)
-  )} FCFA. ${
+  )} FCFA. Pending collections awaiting field collection total ${formatXAF(
+    totalPending
+  )} FCFA across ${pending.length} tasks. ${
     topClient ? `Key client '${topClient.name}' contributed ${formatXAF(topClient.amount)} FCFA. ` : ''
   }${
     sectorBreakdown.length > 0
@@ -178,6 +249,8 @@ export function calculateReportMetrics(
     startDateStr: start.toLocaleDateString('en-GB'),
     endDateStr: end.toLocaleDateString('en-GB'),
     totalCollected,
+    totalOutstanding,
+    totalTarget,
     totalPending,
     totalAttempted,
     completedCount: completed.length,
@@ -195,7 +268,7 @@ export function calculateReportMetrics(
 }
 
 // -------------------------------------------------------------
-// 1. PDF GENERATOR FOR GENERAL REPORT
+// 1. PDF GENERATOR FOR GENERAL & DAILY & MONTHLY REPORTS
 // -------------------------------------------------------------
 export function downloadReportPDF(
   collections: Collection[],
@@ -204,135 +277,187 @@ export function downloadReportPDF(
 ) {
   const doc = new jsPDF();
 
-  // Primary brand cyan banner header
-  doc.setFillColor(8, 145, 178); // #0891b2
+  // Primary brand navy/cyan banner header
+  doc.setFillColor(0, 31, 91); // #001f5b
   doc.rect(0, 0, 210, 24, 'F');
 
   doc.setTextColor(255, 255, 255);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(14);
-  doc.text('E-NAKO — FIELD COLLECTION REPORT', 14, 11);
-  doc.setFontSize(9);
+  doc.text('E-NAKO CASH — OTC OPERATIONS & RECONCILIATION REPORT', 14, 11);
+  doc.setFontSize(8.5);
   doc.setFont('helvetica', 'normal');
-  doc.text('Institutional Cash Management & Field Agent Reconciliation', 14, 18);
+  doc.setTextColor(203, 213, 225);
+  doc.text('Institutional Cash Collection & Field Liquidity Management', 14, 18);
 
   // Metadata block
-  doc.setTextColor(26, 28, 28);
-  doc.setFontSize(10);
+  doc.setTextColor(15, 23, 42);
+  doc.setFontSize(11);
   doc.setFont('helvetica', 'bold');
   doc.text(metrics.periodLabel.toUpperCase(), 14, 33);
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8.5);
-  doc.setTextColor(95, 94, 94);
-  doc.text(`Generated: ${new Date().toLocaleString()} | Terminal: ${user.terminalId}`, 14, 38);
-  doc.text(`Collector Officer: ${user.name} (${user.id}) | Branch: ${user.branch}`, 14, 43);
+  doc.setTextColor(100, 116, 139);
+  doc.text(`Generated: ${new Date().toLocaleString()} | Terminal ID: ${user.terminalId}`, 14, 38);
+  doc.text(`Officer / Manager: ${user.name} (${user.id}) | Agency Hub: ${user.branch}`, 14, 43);
 
-  // Executive KPI summary box
-  doc.setFillColor(243, 243, 243);
-  doc.roundedRect(14, 47, 182, 28, 2, 2, 'F');
-  doc.setDrawColor(229, 229, 229);
-  doc.roundedRect(14, 47, 182, 28, 2, 2, 'S');
+  // Executive KPI summary box with Total Collected, Outstanding Balance, and Target Due
+  doc.setFillColor(248, 250, 252);
+  doc.roundedRect(14, 47, 182, 36, 2, 2, 'F');
+  doc.setDrawColor(226, 232, 240);
+  doc.roundedRect(14, 47, 182, 36, 2, 2, 'S');
 
   // KPI 1: Total Cash Collected (Settled)
   doc.setFontSize(7.5);
-  doc.setTextColor(95, 94, 94);
-  doc.text('TOTAL CASH COLLECTED', 20, 54);
+  doc.setTextColor(100, 116, 139);
+  doc.setFont('helvetica', 'bold');
+  doc.text('TOTAL CASH COLLECTED', 18, 54);
   doc.setFontSize(12);
   doc.setFont('helvetica', 'bold');
-  doc.setTextColor(8, 145, 178);
-  doc.text(`${formatXAF(metrics.totalCollected)} FCFA`, 20, 62);
+  doc.setTextColor(8, 145, 178); // #0891b2
+  doc.text(`${formatXAF(metrics.totalCollected)} FCFA`, 18, 62);
 
-  // KPI 2: Recovery Rate
+  // KPI 2: Total Outstanding Balance Total (Highlighted)
   doc.setFontSize(7.5);
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(95, 94, 94);
-  doc.text('SETTLEMENT SUCCESS', 80, 54);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(225, 29, 72); // rose-600
+  doc.text('OUTSTANDING BALANCE TOTAL', 78, 54);
   doc.setFontSize(12);
   doc.setFont('helvetica', 'bold');
-  doc.setTextColor(26, 28, 28);
-  doc.text(`${metrics.successRate.toFixed(1)}% (${metrics.completedCount}/${metrics.totalAttempted})`, 80, 62);
+  doc.setTextColor(225, 29, 72);
+  doc.text(`${formatXAF(metrics.totalOutstanding)} FCFA`, 78, 62);
 
-  // KPI 3: Avg Ticket Size
+  // KPI 3: Total Target Due
   doc.setFontSize(7.5);
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(95, 94, 94);
-  doc.text('AVG TICKET / VISIT', 140, 54);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(100, 116, 139);
+  doc.text('TOTAL TARGET / DUE', 142, 54);
   doc.setFontSize(12);
   doc.setFont('helvetica', 'bold');
-  doc.setTextColor(26, 28, 28);
-  doc.text(`${formatXAF(Math.round(metrics.avgTicketSize))} FCFA`, 140, 62);
+  doc.setTextColor(15, 23, 42);
+  doc.text(`${formatXAF(metrics.totalTarget)} FCFA`, 142, 62);
 
-  // Pending Collections banner inside KPI box
+  // Sub-row inside KPI box
+  doc.setDrawColor(226, 232, 240);
+  doc.line(18, 67, 192, 67);
+
   doc.setFontSize(7.5);
   doc.setFont('helvetica', 'normal');
-  doc.setTextColor(202, 138, 4);
-  doc.text(`* Pending Volume: ${formatXAF(metrics.totalPending)} FCFA (${metrics.pendingCount} collections assigned)`, 20, 71);
+  doc.setTextColor(71, 85, 105);
+  doc.text(`Settlement Efficiency: ${metrics.successRate.toFixed(1)}% (${metrics.completedCount} Settled / ${metrics.totalAttempted} Tasks)`, 18, 76);
+  doc.text(`Pending Field Tasks: ${metrics.pendingCount} (${formatXAF(metrics.totalPending)} FCFA)`, 102, 76);
+  doc.text(`Avg Ticket: ${formatXAF(Math.round(metrics.avgTicketSize))} FCFA`, 154, 76);
 
-  // Executive summary for Boss paragraph
+  // Executive summary briefing
   doc.setFontSize(8.5);
   doc.setFont('helvetica', 'bold');
-  doc.setTextColor(8, 145, 178);
-  doc.text('MANAGEMENT EXECUTIVE BRIEFING:', 14, 82);
+  doc.setTextColor(0, 31, 91);
+  doc.text('OPERATIONAL EXECUTIVE BRIEFING:', 14, 91);
 
   doc.setFont('helvetica', 'normal');
-  doc.setTextColor(40, 40, 40);
+  doc.setTextColor(51, 65, 85);
   doc.setFontSize(8);
   const splitSummary = doc.splitTextToSize(metrics.bossExecutiveSummary, 182);
-  doc.text(splitSummary, 14, 87);
+  doc.text(splitSummary, 14, 96);
 
-  const startY = 87 + splitSummary.length * 4 + 4;
+  const startY = 96 + splitSummary.length * 4 + 4;
 
-  // Transaction items table
-  const tableData = collections.map((col) => [
-    col.id,
-    col.clientName,
-    col.assignedCollectorName || user.name || 'Field Agent',
-    `${formatXAF(col.amount)} FCFA`,
-    col.location || 'Douala, Cameroon',
-    new Date(col.timestamp || Date.now()).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }),
-    col.status === 'COMPLETE' ? 'SETTLED' : col.status,
-  ]);
+  // Itemized Transactions Table with Target Due, Collected, and Outstanding Balance per row
+  const tableData = collections.map((col) => {
+    const target = Number(col.targetAmount || col.amount || 0);
+    const actual = col.actualAmountCollected !== undefined 
+      ? Number(col.actualAmountCollected) 
+      : (col.status === 'COMPLETE' ? Number(col.amount || 0) : 0);
+    const shortage = col.shortageAmount !== undefined 
+      ? Number(col.shortageAmount) 
+      : (col.status === 'COMPLETE' ? Math.max(0, target - actual) : target);
+
+    return [
+      col.id,
+      col.clientName,
+      col.assignedCollectorName || user.name || 'Field Agent',
+      `${formatXAF(target)} FCFA`,
+      `${formatXAF(actual)} FCFA`,
+      `${formatXAF(shortage)} FCFA`,
+      new Date(col.timestamp || Date.now()).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }),
+      col.status === 'COMPLETE' ? (shortage > 0 ? 'DEFICIT SETTLED' : 'FULL SETTLED') : col.status,
+    ];
+  });
 
   autoTable(doc, {
     startY: startY,
-    head: [['Transaction Ref', 'Client Name', 'Collector', 'Amount (FCFA)', 'Location', 'Timestamp', 'Status']],
+    head: [['Ref ID', 'Client Name', 'Collector', 'Target Due', 'Collected', 'Outstanding', 'Timestamp', 'Status']],
     body: tableData,
+    foot: [
+      [
+        'TOTALS',
+        '',
+        '',
+        `${formatXAF(metrics.totalTarget)} FCFA`,
+        `${formatXAF(metrics.totalCollected)} FCFA`,
+        `${formatXAF(metrics.totalOutstanding)} FCFA`,
+        '',
+        `${metrics.completedCount}/${metrics.totalAttempted} Settled`
+      ]
+    ],
     theme: 'striped',
     headStyles: {
-      fillColor: [8, 145, 178],
+      fillColor: [0, 31, 91],
       textColor: [255, 255, 255],
       fontStyle: 'bold',
-      fontSize: 8,
+      fontSize: 7.5,
+    },
+    footStyles: {
+      fillColor: [241, 245, 249],
+      textColor: [15, 23, 42],
+      fontStyle: 'bold',
+      fontSize: 7.5,
     },
     bodyStyles: {
-      fontSize: 7.5,
+      fontSize: 7,
       textColor: [26, 28, 28],
     },
     alternateRowStyles: {
       fillColor: [248, 250, 252],
     },
     columnStyles: {
-      0: { fontStyle: 'bold', textColor: [8, 145, 178] },
-      3: { fontStyle: 'bold' },
+      0: { fontStyle: 'bold', textColor: [0, 31, 91] },
+      3: { fontStyle: 'normal' },
+      4: { fontStyle: 'bold', textColor: [8, 145, 178] },
+      5: { fontStyle: 'bold', textColor: [225, 29, 72] }, // Highlight outstanding balance in red
     },
     margin: { left: 14, right: 14 },
   });
 
   // Footer signatures
   const finalY = (doc as any).lastAutoTable.finalY + 12;
-  if (finalY < 250) {
-    doc.setDrawColor(200, 200, 200);
-    doc.line(14, finalY + 15, 80, finalY + 15);
-    doc.line(130, finalY + 15, 196, finalY + 15);
+  if (finalY < 255) {
+    doc.setDrawColor(203, 213, 225);
+    doc.line(14, finalY + 14, 80, finalY + 14);
+    doc.line(130, finalY + 14, 196, finalY + 14);
 
     doc.setFontSize(7.5);
-    doc.setTextColor(95, 94, 94);
-    doc.text(`Field Collector: ${user.name}`, 14, finalY + 19);
-    doc.text('Vault Teller / Clearance Supervisor', 130, finalY + 19);
+    doc.setTextColor(100, 116, 139);
+    doc.text(`Field Collector: ${user.name}`, 14, finalY + 18);
+    doc.text('Vault Teller / Clearance Supervisor', 130, finalY + 18);
   }
 
-  doc.save(`E_NAKO_Report_${metrics.periodLabel.replace(/[^a-zA-Z0-9]/g, '_')}_${Date.now()}.pdf`);
+  const safeFilename = metrics.periodLabel.replace(/[^a-zA-Z0-9]/g, '_');
+  doc.save(`E_NAKO_Report_${safeFilename}_${Date.now()}.pdf`);
+}
+
+/**
+ * 1-Click Fast Daily PDF Downloader for the Dashboard
+ */
+export function downloadDailyReportPDF(
+  collections: Collection[],
+  user: CollectorUser,
+  targetDate: Date | string = new Date()
+) {
+  const { filtered, periodLabel, start, end } = filterCollectionsByDay(collections, targetDate);
+  const metrics = calculateReportMetrics(filtered, [], [], periodLabel, start, end);
+  downloadReportPDF(filtered, metrics, user);
 }
 
 // -------------------------------------------------------------
@@ -358,6 +483,8 @@ export function downloadReportExcel(
     ['EXECUTIVE KEY PERFORMANCE INDICATORS (KPIs)'],
     ['Metric Description', 'Calculated Value', 'Notes / Benchmark'],
     ['Total Cash Collected (Settled)', metrics.totalCollected, 'Total vaulted or cleared for deposit (FCFA)'],
+    ['Total Outstanding Balance', metrics.totalOutstanding, 'Shortfall deficit and uncollected balance (FCFA)'],
+    ['Total Target / Due Volume', metrics.totalTarget, 'Total expected collection volume (FCFA)'],
     ['Pending Collections Volume', metrics.totalPending, 'Awaiting field clearance (FCFA)'],
     ['Total Tasks Attempted', metrics.totalAttempted, 'Total field collection tasks'],
     ['Settled Collections Count', metrics.completedCount, 'Completed cash settlements'],
@@ -382,22 +509,50 @@ export function downloadReportExcel(
     'Transaction Ref',
     'Client Name',
     'Collector Name',
-    'Amount (FCFA)',
+    'Target Due (FCFA)',
+    'Collected Amount (FCFA)',
+    'Outstanding Balance (FCFA)',
     'Date & Time',
     'Status',
     'Location',
     'Collector Notes',
   ];
 
-  const detailRows = collections.map((col) => [
-    col.id,
-    col.clientName,
-    col.assignedCollectorName || user.name || 'Collector',
-    col.amount,
-    new Date(col.timestamp || Date.now()).toLocaleString(),
-    col.status === 'COMPLETE' ? 'SETTLED' : col.status,
-    col.location || 'Douala, Cameroon',
-    col.notes || '',
+  const detailRows = collections.map((col) => {
+    const target = Number(col.targetAmount || col.amount || 0);
+    const actual = col.actualAmountCollected !== undefined 
+      ? Number(col.actualAmountCollected) 
+      : (col.status === 'COMPLETE' ? Number(col.amount || 0) : 0);
+    const shortage = col.shortageAmount !== undefined 
+      ? Number(col.shortageAmount) 
+      : (col.status === 'COMPLETE' ? Math.max(0, target - actual) : target);
+
+    return [
+      col.id,
+      col.clientName,
+      col.assignedCollectorName || user.name || 'Collector',
+      target,
+      actual,
+      shortage,
+      new Date(col.timestamp || Date.now()).toLocaleString(),
+      col.status === 'COMPLETE' ? 'SETTLED' : col.status,
+      col.location || 'Douala, Cameroon',
+      col.notes || '',
+    ];
+  });
+
+  // Append Total Row to Excel detail sheet
+  detailRows.push([
+    'TOTALS',
+    '',
+    '',
+    metrics.totalTarget,
+    metrics.totalCollected,
+    metrics.totalOutstanding,
+    '',
+    `${metrics.completedCount}/${metrics.totalAttempted} Settled`,
+    '',
+    '',
   ]);
 
   const wsDetails = XLSX.utils.aoa_to_sheet([detailHeaders, ...detailRows]);
