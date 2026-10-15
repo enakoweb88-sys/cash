@@ -159,6 +159,32 @@ export async function createRemoteCollector(collectorData: any): Promise<boolean
   }
 }
 
+export async function deleteRemoteCollector(id: string): Promise<boolean> {
+  try {
+    const res = await fetch(`${API_BASE_URL}/cash-collections/collectors/${id}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+    });
+    return res.ok;
+  } catch (error) {
+    console.warn('Backend collector delete notice:', error);
+    return false;
+  }
+}
+
+export async function deleteAllRemoteCollectors(): Promise<boolean> {
+  try {
+    const res = await fetch(`${API_BASE_URL}/cash-collections/collectors`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+    });
+    return res.ok;
+  } catch (error) {
+    console.warn('Backend all collectors delete notice:', error);
+    return false;
+  }
+}
+
 // ─── FX TRANSACTIONS API ───
 
 export function getLocalTransactions(): any[] {

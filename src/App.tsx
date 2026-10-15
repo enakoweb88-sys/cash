@@ -37,6 +37,8 @@ import {
   sendCollectionNotificationEmail,
   fetchRemoteCollectors,
   createRemoteCollector,
+  deleteRemoteCollector,
+  deleteAllRemoteCollectors,
   ensureAdminToken
 } from './api/cashApi';
 import { generateReceiptPdfBase64 } from './utils/exportUtils';
@@ -74,6 +76,24 @@ const getInitialView = (): ViewType => {
 };
 
 export default function App() {
+  // Purge stale demo/cached collections and old accounts on migration v6
+  if (typeof window !== 'undefined') {
+    const isClearedV6 = localStorage.getItem('enako_cash_data_cleared_v6');
+    if (!isClearedV6) {
+      localStorage.removeItem('enako_cash_accounts');
+      localStorage.removeItem('enako_collections');
+      localStorage.removeItem('enako_clients');
+      localStorage.removeItem('enako_drafts');
+      localStorage.removeItem('enako_cash_collections');
+      localStorage.removeItem('cash_collections');
+      localStorage.removeItem('afriland_collections');
+      localStorage.removeItem('afriland_clients');
+      localStorage.removeItem('afriland_drafts');
+      localStorage.removeItem('enako_cash_transactions');
+      localStorage.setItem('enako_cash_data_cleared_v6', 'true');
+    }
+  }
+
   // Accounts Database (Persistent in localStorage)
   const [accounts, setAccounts] = useState<UserAccount[]>(() => {
     const saved = localStorage.getItem('enako_cash_accounts');
@@ -120,42 +140,15 @@ export default function App() {
     }
   }, [user, currentView]);
 
-  // Auto-clear demo / stale data on load to start completely clean with live database
-  useEffect(() => {
-    const isCleared = localStorage.getItem('enako_cash_data_cleared_v3');
-    if (!isCleared) {
-      localStorage.removeItem('enako_collections');
-      localStorage.removeItem('enako_clients');
-      localStorage.removeItem('enako_drafts');
-      localStorage.removeItem('enako_cash_collections');
-      localStorage.removeItem('cash_collections');
-      localStorage.removeItem('afriland_collections');
-      localStorage.removeItem('afriland_clients');
-      localStorage.removeItem('afriland_drafts');
-      localStorage.removeItem('enako_cash_transactions');
-      localStorage.setItem('enako_cash_data_cleared_v3', 'true');
-    }
-  }, []);
-
   // Clients State - Automatically initialized with Approved KYC Profiles
   const [clients, setClients] = useState<Client[]>(() => {
     const saved = localStorage.getItem('enako_clients');
     const parsed: Client[] = saved ? JSON.parse(saved) : [];
-    const initialKycClients = getInitialKycApprovedClients();
-    
-    const existingKeys = new Set(
-      parsed.map((c) => (c.kycId || c.id || c.name).toLowerCase())
-    );
-    const missingKyc = initialKycClients.filter(
-      (k) => !existingKeys.has((k.kycId || k.id || k.name).toLowerCase())
-    );
-    return [...missingKyc, ...parsed];
+    return parsed;
   });
 
   // Collections (Settled / Server synced from Backend API)
   const [collections, setCollections] = useState<Collection[]>(() => {
-    const cleared = localStorage.getItem('enako_cash_data_cleared_v3');
-    if (!cleared) return [];
     const saved = localStorage.getItem('enako_collections');
     return saved ? JSON.parse(saved) : [];
   });
@@ -403,6 +396,46 @@ export default function App() {
     setUser(newUser);
     showToast(`Account created successfully! Welcome, ${userData.firstName.trim()}!`, 'success');
     return { success: true };
+  };
+
+  // Delete individual collector
+  const handleDeleteAccount = async (id: string) => {
+    try {
+      await deleteRemoteCollector(id);
+      setAccounts((prev) => {
+        const next = prev.filter((a) => a.id !== id && a.terminalId !== id);
+        localStorage.setItem('enako_cash_accounts', JSON.stringify(next));
+        return next;
+      });
+      setCollections((prev) => {
+        const next = prev.filter((c) => c.assignedCollectorId !== id);
+        localStorage.setItem('enako_collections', JSON.stringify(next));
+        return next;
+      });
+      showToast('Collector and their records deleted successfully', 'info');
+    } catch (e) {
+      console.error(e);
+      showToast('Failed to delete collector', 'error');
+    }
+  };
+
+  // Delete all collectors and their collection history
+  const handleDeleteAllAccounts = async () => {
+    if (!window.confirm('Are you sure you want to delete ALL cash collectors and their complete collection history? This action cannot be undone.')) {
+      return;
+    }
+    try {
+      await deleteAllRemoteCollectors();
+      setAccounts([]);
+      setCollections([]);
+      localStorage.removeItem('enako_cash_accounts');
+      localStorage.removeItem('enako_collections');
+      localStorage.removeItem('enako_cash_collections');
+      showToast('All collectors and collection history successfully purged', 'success');
+    } catch (e) {
+      console.error(e);
+      showToast('Failed to delete all collectors', 'error');
+    }
   };
 
   // Logout handler
@@ -784,6 +817,8 @@ export default function App() {
               collections={collections}
               currentUser={user}
               onAddAccount={handleAddAccount}
+              onDeleteAccount={handleDeleteAccount}
+              onDeleteAllAccounts={handleDeleteAllAccounts}
               onShowToast={showToast}
               onNavigate={setCurrentView}
             />

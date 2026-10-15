@@ -22,7 +22,8 @@ import {
   MapPin,
   Calendar,
   Banknote,
-  ChevronRight
+  ChevronRight,
+  Trash2
 } from 'lucide-react';
 import { UserAccount, CollectorUser, Collection } from '../types';
 import { formatXAF } from '../data/mockData';
@@ -35,6 +36,8 @@ interface CollectorsViewProps {
   collections: Collection[];
   currentUser: CollectorUser;
   onAddAccount: (account: Omit<UserAccount, 'id' | 'createdAt'>) => void;
+  onDeleteAccount?: (id: string) => void;
+  onDeleteAllAccounts?: () => void;
   onShowToast: (msg: string, type?: 'success' | 'info' | 'error') => void;
   onNavigate: (view: any) => void;
 }
@@ -44,6 +47,8 @@ export const CollectorsView: React.FC<CollectorsViewProps> = ({
   collections,
   currentUser,
   onAddAccount,
+  onDeleteAccount,
+  onDeleteAllAccounts,
   onShowToast,
   onNavigate,
 }) => {
@@ -378,6 +383,21 @@ export const CollectorsView: React.FC<CollectorsViewProps> = ({
               <FileSpreadsheet className="w-4 h-4" />
               <span>Excel Export ({periodInfo.label})</span>
             </button>
+
+            {onDeleteAccount && (
+              <button
+                onClick={() => {
+                  if (window.confirm(`Delete collector ${selectedCollector.fullName || selectedCollector.firstName}? All their collection history will be purged.`)) {
+                    onDeleteAccount(selectedCollector.id);
+                    setSelectedCollector(null);
+                  }
+                }}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-xs font-bold uppercase tracking-wider flex items-center gap-2 transition-colors cursor-pointer shadow-xs"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>Delete Collector</span>
+              </button>
+            )}
           </div>
         </div>
 
@@ -573,13 +593,26 @@ export const CollectorsView: React.FC<CollectorsViewProps> = ({
           </p>
         </div>
 
-        <button
-          onClick={() => setIsAddModalOpen(true)}
-          className="px-6 py-2.5 bg-[#0891b2] hover:bg-[#0e7490] text-white text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-xs"
-        >
-          <UserPlus className="w-4 h-4" />
-          <span>Register New Collector</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-3">
+          {onDeleteAllAccounts && accounts.length > 0 && (
+            <button
+              onClick={onDeleteAllAccounts}
+              className="px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-xs"
+              title="Delete all collectors and their collection history"
+            >
+              <Trash2 className="w-4 h-4" />
+              <span>Delete All Collectors</span>
+            </button>
+          )}
+
+          <button
+            onClick={() => setIsAddModalOpen(true)}
+            className="px-6 py-2.5 bg-[#0891b2] hover:bg-[#0e7490] text-white text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-xs"
+          >
+            <UserPlus className="w-4 h-4" />
+            <span>Register New Collector</span>
+          </button>
+        </div>
       </div>
 
       {/* Metrics Summary */}
@@ -680,9 +713,26 @@ export const CollectorsView: React.FC<CollectorsViewProps> = ({
                       </div>
                     </div>
 
-                    <span className="px-2 py-0.5 bg-[#dcfce7] text-[#166534] border border-[#86efac] text-[9px] font-black uppercase tracking-wider">
-                      {acc.status || 'ACTIVE'}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="px-2 py-0.5 bg-[#dcfce7] text-[#166534] border border-[#86efac] text-[9px] font-black uppercase tracking-wider">
+                        {acc.status || 'ACTIVE'}
+                      </span>
+                      {onDeleteAccount && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (window.confirm(`Delete collector ${acc.fullName || acc.firstName}? All their collection history will be purged.`)) {
+                              onDeleteAccount(acc.id);
+                            }
+                          }}
+                          className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                          title="Delete Collector"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   <div className="mt-4 pt-3 border-t border-[#e5e5e5] space-y-2 text-xs text-[#595959]">
