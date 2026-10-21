@@ -4,7 +4,6 @@ import {
   Banknote,
   Users,
   UserCheck,
-  FileText,
   HelpCircle,
   LogOut,
   X,
@@ -20,7 +19,6 @@ interface SidebarProps {
   currentView: ViewType;
   onNavigate: (view: ViewType) => void;
   user: CollectorUser;
-  onOpenReport: () => void;
   onOpenSupport: () => void;
   onLogout: () => void;
   mobileOpen?: boolean;
@@ -31,7 +29,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
   currentView,
   onNavigate,
   user,
-  onOpenReport,
   onOpenSupport,
   onLogout,
   mobileOpen = false,
@@ -140,17 +137,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Bottom Actions & Utilities */}
       <div className="px-4 mt-auto flex flex-col gap-4 pb-6 pt-4 border-t border-[#474746]/30">
-        <button
-          onClick={() => {
-            onOpenReport();
-            if (onCloseMobile) onCloseMobile();
-          }}
-          className="w-full h-11 bg-[#0891b2] hover:bg-[#0e7490] text-white border border-[#06b6d4] flex items-center justify-center gap-2 text-xs font-bold tracking-wider uppercase transition-colors shadow-sm"
-        >
-          <FileText className="w-4 h-4" />
-          <span>Generate Report</span>
-        </button>
-
         <ul className="flex flex-col gap-1">
           <li>
             <button

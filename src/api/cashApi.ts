@@ -87,6 +87,7 @@ export async function createRemoteCollection(collection: Collection): Promise<bo
       location: collection.location || 'Douala Field Sector',
       amountCollected: Number(collection.amount),
       outstandingBalance: collection.shortageAmount || 0,
+      collectionTime: collection.timestamp,
       status: collection.status || 'PENDING',
       description: JSON.stringify(descriptionObj),
       receiptUrl: collection.receiptUrl,

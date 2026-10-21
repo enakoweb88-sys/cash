@@ -38,7 +38,6 @@ interface DashboardViewProps {
   onNavigate: (view: ViewType) => void;
   onSelectCollection: (col: Collection) => void;
   onOpenStatusUpdate?: (col: Collection) => void;
-  onOpenReport?: () => void;
   onUpdateCollectionPhoto?: (id: string, photoUrl: string) => void;
 }
 
@@ -48,7 +47,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onNavigate,
   onSelectCollection,
   onOpenStatusUpdate,
-  onOpenReport,
   onUpdateCollectionPhoto,
 }) => {
   const isCeoOrManager = hasOperationalAccess(user);
@@ -59,6 +57,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const isToday = (ts?: string | number | Date) => {
     if (!ts) return false;
     const d = new Date(ts);
+    if (Number.isNaN(d.getTime())) return false;
     const now = new Date();
     return (
       d.getFullYear() === now.getFullYear() &&
@@ -107,9 +106,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   });
 
   // DAILY TRANSACTIONS ONLY vs ALL ACTIVE TOGGLE
-  // Default to today if today has records; otherwise fallback to 'all' so users don't see a blank 0-metric screen
-  const hasTodayCollections = collections.some((c) => isToday(c.timestamp));
-  const [timeframeMode, setTimeframeMode] = useState<'today' | 'all'>(() => (hasTodayCollections ? 'today' : 'all'));
+  // Today is always the default. Historical records appear only after the user selects All.
+  const [timeframeMode, setTimeframeMode] = useState<'today' | 'all'>('today');
 
   const dailyCollectorCollections = collectorCollections.filter((c) => isToday(c.timestamp));
   const dailyCompanyCollections = collections.filter((c) => isToday(c.timestamp));
@@ -618,16 +616,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <Download className="w-4 h-4 text-[#0891b2]" />
               <span>Download Daily PDF</span>
             </button>
-
-            {onOpenReport && (
-              <button
-                onClick={onOpenReport}
-                className="flex-1 md:flex-none px-4 py-2.5 bg-slate-50 border border-slate-300 text-slate-700 hover:bg-slate-100 rounded-xl text-xs font-bold tracking-wider uppercase flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs"
-              >
-                <FileText className="w-4 h-4 text-slate-600" />
-                <span>Custom Report</span>
-              </button>
-            )}
 
             <button
               onClick={() => onNavigate('new-collection')}
@@ -1167,16 +1155,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <Download className="w-4 h-4 text-[#0891b2]" />
             <span>Download Daily PDF</span>
           </button>
-
-          {onOpenReport && (
-            <button
-              onClick={onOpenReport}
-              className="flex-1 md:flex-none h-11 px-5 bg-slate-50 border border-slate-300 text-slate-700 hover:bg-slate-100 rounded-xl text-xs font-bold tracking-wider uppercase flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs"
-            >
-              <FileText className="w-4 h-4 text-slate-600" />
-              <span>Custom Report</span>
-            </button>
-          )}
 
           <button
             onClick={() => onNavigate('new-collection')}

@@ -20,7 +20,6 @@ import { KycView } from './components/KycView';
 import { CollectorsView } from './components/CollectorsView';
 import { LoginView } from './components/LoginView';
 import { ReceiptModal } from './components/ReceiptModal';
-import { GenerateReportModal } from './components/GenerateReportModal';
 import { SettingsModal } from './components/SettingsModal';
 import { SupportModal } from './components/SupportModal';
 import { ProfileModal } from './components/ProfileModal';
@@ -173,7 +172,6 @@ export default function App() {
   // Modals state
   const [activeReceipt, setActiveReceipt] = useState<Collection | null>(null);
   const [statusUpdateCollection, setStatusUpdateCollection] = useState<Collection | null>(null);
-  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isSupportModalOpen, setIsSupportModalOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
@@ -766,7 +764,6 @@ export default function App() {
           setCurrentView(view);
         }}
         user={user}
-        onOpenReport={() => setIsReportModalOpen(true)}
         onOpenSupport={() => setIsSupportModalOpen(true)}
         onLogout={handleLogout}
         mobileOpen={mobileMenuOpen}
@@ -833,7 +830,6 @@ export default function App() {
               }}
               onSelectCollection={(col) => setActiveReceipt(col)}
               onOpenStatusUpdate={mayEditExistingRecords ? (col) => setStatusUpdateCollection(col) : undefined}
-              onOpenReport={() => setIsReportModalOpen(true)}
               onUpdateCollectionPhoto={mayEditExistingRecords ? handleUpdateCollectionPhoto : undefined}
             />
           )}
@@ -878,7 +874,6 @@ export default function App() {
               clients={clients}
               onSelectCollection={(col) => setActiveReceipt(col)}
               onOpenStatusUpdate={mayEditExistingRecords ? (col) => setStatusUpdateCollection(col) : undefined}
-              onOpenReport={() => setIsReportModalOpen(true)}
             />
           )}
 
@@ -928,15 +923,6 @@ export default function App() {
         onClose={() => setStatusUpdateCollection(null)}
         onSaveStatus={handleSaveStatus}
       />
-
-      {isReportModalOpen && (
-        <GenerateReportModal
-          collections={collections}
-          clients={clients}
-          user={user}
-          onClose={() => setIsReportModalOpen(false)}
-        />
-      )}
 
       {isSettingsModalOpen && mayConfigureSystem && (
         <SettingsModal

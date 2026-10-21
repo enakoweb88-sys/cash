@@ -3,6 +3,7 @@ import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
 import { Collection, CollectorUser, Client } from '../types';
 import { formatXAF } from '../data/mockData';
+import logoDataUrl from '../assets/logo.png?inline';
 
 export type ReportPeriod = 'daily' | 'weekly' | 'monthly' | 'all';
 
@@ -27,6 +28,12 @@ export interface ReportMetrics {
   dailyBreakdown: { date: string; amount: number; count: number }[];
   bossExecutiveSummary: string;
 }
+
+const getRecordedCollectionDate = (item: Collection): Date | null => {
+  if (!item.timestamp) return null;
+  const date = new Date(item.timestamp);
+  return Number.isNaN(date.getTime()) ? null : date;
+};
 
 /**
  * Filter collections by timeframe
@@ -63,8 +70,8 @@ export function filterCollectionsByPeriod(
   }
 
   const filtered = collections.filter((item) => {
-    const itemDate = new Date(item.timestamp || Date.now());
-    return itemDate >= start && itemDate <= end;
+    const itemDate = getRecordedCollectionDate(item);
+    return itemDate !== null && itemDate >= start && itemDate <= end;
   });
 
   return { filtered, periodLabel, start, end };
@@ -83,8 +90,8 @@ export function filterCollectionsByDay(
   const periodLabel = `Daily Report (${ref.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })})`;
 
   const filtered = collections.filter((item) => {
-    const itemDate = new Date(item.timestamp || Date.now());
-    return itemDate >= start && itemDate <= end;
+    const itemDate = getRecordedCollectionDate(item);
+    return itemDate !== null && itemDate >= start && itemDate <= end;
   });
 
   return { filtered, periodLabel, start, end };
@@ -104,8 +111,8 @@ export function filterCollectionsByMonth(
   const periodLabel = `Monthly Report (${monthName})`;
 
   const filtered = collections.filter((item) => {
-    const itemDate = new Date(item.timestamp || Date.now());
-    return itemDate >= start && itemDate <= end;
+    const itemDate = getRecordedCollectionDate(item);
+    return itemDate !== null && itemDate >= start && itemDate <= end;
   });
 
   return { filtered, periodLabel, start, end };
@@ -282,13 +289,14 @@ export function downloadReportPDF(
   doc.rect(0, 0, 210, 24, 'F');
 
   doc.setTextColor(255, 255, 255);
+  doc.addImage(logoDataUrl, 'PNG', 14, 3, 18, 18);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(14);
-  doc.text('E-NAKO CASH — OTC OPERATIONS & RECONCILIATION REPORT', 14, 11);
+  doc.text('E-NAKO CASH | OTC OPERATIONS & RECONCILIATION REPORT', 38, 11);
   doc.setFontSize(8.5);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(203, 213, 225);
-  doc.text('Institutional Cash Collection & Field Liquidity Management', 14, 18);
+  doc.text('Institutional Cash Collection & Field Liquidity Management', 38, 18);
 
   // Metadata block
   doc.setTextColor(15, 23, 42);
@@ -339,9 +347,6 @@ export function downloadReportPDF(
   doc.text(`${formatXAF(metrics.totalTarget)} FCFA`, 142, 62);
 
   // Sub-row inside KPI box
-  doc.setDrawColor(226, 232, 240);
-  doc.line(18, 67, 192, 67);
-
   doc.setFontSize(7.5);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(71, 85, 105);
@@ -433,10 +438,6 @@ export function downloadReportPDF(
   // Footer signatures
   const finalY = (doc as any).lastAutoTable.finalY + 12;
   if (finalY < 255) {
-    doc.setDrawColor(203, 213, 225);
-    doc.line(14, finalY + 14, 80, finalY + 14);
-    doc.line(130, finalY + 14, 196, finalY + 14);
-
     doc.setFontSize(7.5);
     doc.setTextColor(100, 116, 139);
     doc.text(`Field Collector: ${user.name}`, 14, finalY + 18);
@@ -725,23 +726,20 @@ export function buildReceiptPdfDocument(collection: Collection, user?: { name?: 
   try {
     const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
 
-    // Header Title
+    // Branded header
+    doc.addImage(logoDataUrl, 'PNG', 14, 8, 18, 18);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(16);
     doc.setTextColor(8, 145, 178);
-    doc.text('E-NAKO CASH SYSTEM', 14, 18);
+    doc.text('E-NAKO CASH SYSTEM', 38, 16);
 
     doc.setFontSize(10);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(95, 94, 94);
-    doc.text('OFFICIAL CASH COLLECTION RECEIPT', 14, 24);
+    doc.text('OFFICIAL CASH COLLECTION RECEIPT', 38, 22);
 
     doc.setFontSize(8);
-    doc.text(`Issued: ${new Date(collection.timestamp || Date.now()).toLocaleString()}`, 14, 29);
-
-    doc.setDrawColor(229, 229, 229);
-    doc.setLineWidth(0.5);
-    doc.line(14, 32, 196, 32);
+    doc.text(`Issued: ${new Date(collection.timestamp || Date.now()).toLocaleString()}`, 38, 27);
 
     // Status Banner
     const isComplete = collection.status === 'COMPLETE';

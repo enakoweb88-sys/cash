@@ -27,7 +27,6 @@ interface HistoryViewProps {
   clients?: Client[];
   onSelectCollection: (col: Collection) => void;
   onOpenStatusUpdate?: (col: Collection) => void;
-  onOpenReport: () => void;
 }
 
 export const HistoryView: React.FC<HistoryViewProps> = ({
@@ -36,7 +35,6 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
   clients = [],
   onSelectCollection,
   onOpenStatusUpdate,
-  onOpenReport,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | TransactionStatus>('ALL');
