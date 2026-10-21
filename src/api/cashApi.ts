@@ -131,6 +131,35 @@ export async function updateRemoteCollectionStatus(
 
 // ─── COLLECTORS / USERS API (SUPABASE BACKEND) ───
 
+export async function fetchRemoteClients(): Promise<any[]> {
+  try {
+    const res = await fetch(`${API_BASE_URL}/cash-collections/clients`, {
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+    });
+    if (!res.ok) return [];
+    const clients = await res.json();
+    return Array.isArray(clients) ? clients : [];
+  } catch (error) {
+    console.warn('Backend clients fetch notice:', error);
+    return [];
+  }
+}
+
+export async function createRemoteClient(clientData: any): Promise<any | null> {
+  try {
+    const res = await fetch(`${API_BASE_URL}/cash-collections/clients`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+      body: JSON.stringify(clientData),
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (error) {
+    console.warn('Backend client create notice:', error);
+    return null;
+  }
+}
+
 export async function fetchRemoteCollectors(): Promise<any[]> {
   try {
     const res = await fetch(`${API_BASE_URL}/cash-collections/collectors`, {
@@ -699,4 +728,3 @@ export async function sendKycDecisionNotificationEmail(
     return true;
   }
 }
-

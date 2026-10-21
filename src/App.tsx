@@ -36,6 +36,8 @@ import {
   settleRemoteTransaction,
   sendCollectionNotificationEmail,
   fetchRemoteCollectors,
+  fetchRemoteClients,
+  createRemoteClient,
   createRemoteCollector,
   deleteRemoteCollector,
   deleteAllRemoteCollectors,
@@ -211,6 +213,22 @@ export default function App() {
           return [...newFromRemote, ...prev];
         });
       }
+    });
+  }, []);
+
+  // Load manually registered clients from the shared database on every device.
+  useEffect(() => {
+    fetchRemoteClients().then((remoteClients) => {
+      if (!remoteClients.length) return;
+      setClients((previous) => {
+        const merged = [...previous];
+        for (const remoteClient of remoteClients) {
+          const index = merged.findIndex((client) => client.id === remoteClient.id);
+          if (index >= 0) merged[index] = { ...merged[index], ...remoteClient };
+          else merged.push(remoteClient);
+        }
+        return merged;
+      });
     });
   }, []);
 
@@ -573,7 +591,14 @@ export default function App() {
       id: newId,
     };
     setClients((prev) => [client, ...prev]);
-    showToast(`Client ${client.name} (#${newId}) registered in terminal!`, 'success');
+    createRemoteClient(client).then((savedClient) => {
+      if (savedClient) {
+        setClients((prev) => prev.map((item) => item.id === client.id ? { ...item, ...savedClient } : item));
+        showToast(`Client ${client.name} (#${newId}) is available on all terminals.`, 'success');
+      } else {
+        showToast(`Client ${client.name} was saved on this device, but server sync failed.`, 'error');
+      }
+    });
   };
 
   // Handle status update, received amounts, and settlement notes
