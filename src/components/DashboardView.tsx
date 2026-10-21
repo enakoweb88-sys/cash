@@ -30,6 +30,7 @@ import {
 import { Collection, ViewType, CollectorUser } from '../types';
 import { formatXAF, INITIAL_USER } from '../data/mockData';
 import { downloadReceiptPDF, downloadDailyReportPDF } from '../utils/exportUtils';
+import { hasOperationalAccess, isSeniorCollector } from '../utils/permissions';
 
 interface DashboardViewProps {
   collections: Collection[];
@@ -50,7 +51,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onOpenReport,
   onUpdateCollectionPhoto,
 }) => {
-  const isCeoOrManager = user?.role === 'CEO / Senior Manager' || user?.email === 'ceo@enako.com' || user?.role === 'CEO' || user?.role === 'Senior Manager' || user?.role === 'Branch Operations Lead';
+  const isCeoOrManager = hasOperationalAccess(user);
+  const isSenior = isSeniorCollector(user);
   const firstName = user?.name ? user.name.trim().split(' ')[0] : 'Collector';
 
   // Helper to check if a collection was logged today (daily transactions)
@@ -1148,7 +1150,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <span>Daily Operations ({new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' })})</span>
           </div>
           <h2 className="text-2xl font-bold tracking-tight text-slate-900 mt-1">
-            Welcome, {firstName} (CEO)
+            Welcome, {firstName} ({isSenior ? 'Senior Cash Officer' : 'CEO'})
           </h2>
           <p className="text-xs text-slate-500 mt-0.5">
             Real-time daily cash collection & liquidity operations console.

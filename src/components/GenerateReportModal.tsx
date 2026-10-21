@@ -20,6 +20,7 @@ import {
   RotateCw,
 } from 'lucide-react';
 import { Collection, CollectorUser, Client } from '../types';
+import { hasOperationalAccess } from '../utils/permissions';
 import { formatXAF } from '../data/mockData';
 import {
   ReportPeriod,
@@ -52,7 +53,7 @@ export const GenerateReportModal: React.FC<GenerateReportModalProps> = ({
 
   // Filter collections by role if field collector
   const userCollections = useMemo(() => {
-    const isCeoOrManager = user?.role === 'CEO / Senior Manager' || user?.email === 'ceo@enako.com' || user?.role === 'CEO' || user?.role === 'Senior Manager' || user?.role === 'Branch Operations Lead';
+    const isCeoOrManager = hasOperationalAccess(user);
     if (isCeoOrManager) return collections;
     const firstName = user?.name ? user.name.trim().split(' ')[0] : '';
     return collections.filter((c) => 

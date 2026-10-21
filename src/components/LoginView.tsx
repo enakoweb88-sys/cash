@@ -3,7 +3,7 @@ import { ShieldCheck, AlertCircle, Eye, EyeOff, Building, Phone, User, Mail, Loc
 import { CollectorUser } from '../types';
 
 interface LoginViewProps {
-  onLogin: (credentials: { emailOrPhone: string; password?: string; role?: string; remember: boolean }) => { success: boolean; error?: string };
+  onLogin: (credentials: { emailOrPhone: string; password?: string; role?: string; remember: boolean }) => Promise<{ success: boolean; error?: string }>;
   onSignUp: (userData: { firstName: string; lastName: string; email: string; phone?: string; branch: string; role: string; password?: string }) => { success: boolean; error?: string };
   currentUser: CollectorUser;
 }
@@ -12,9 +12,9 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onSignUp, current
   // Login Role: CEO / Executive Manager vs Field Cash Collector / Senior Cash Officer
   const [loginRole, setLoginRole] = useState<'CEO' | 'SENIOR' | 'COLLECTOR'>('CEO');
 
-  // CEO Credentials Defaults
-  const [email, setEmail] = useState('ceo@enako.com');
-  const [password, setPassword] = useState('Enako@2025!');
+  // Credentials are intentionally blank. Never expose privileged credentials in the UI.
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
 
   // Collector Credentials Defaults (Phone & PIN)
   const [phoneOrTerminal, setPhoneOrTerminal] = useState('');
@@ -29,28 +29,17 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onSignUp, current
     setErrorMsg(null);
     setIsLoading(true);
 
-    setTimeout(() => {
+    setTimeout(async () => {
       if (loginRole === 'CEO') {
         const trimmedEmail = email.trim().toLowerCase();
-        if (trimmedEmail === 'ceo@enako.com' && password === 'Enako@2025!') {
-          const res = onLogin({
-            emailOrPhone: 'ceo@enako.com',
-            password: 'Enako@2025!',
-            role: 'CEO / Executive Manager',
-            remember: true,
-          });
-          if (!res.success) setErrorMsg(res.error || 'Login failed.');
-        } else {
-          // Attempt standard login with typed credentials
-          const res = onLogin({
-            emailOrPhone: trimmedEmail,
-            password: password,
-            role: 'CEO / Executive Manager',
-            remember: true,
-          });
-          if (!res.success) {
-            setErrorMsg('Invalid CEO credentials. Ensure Email is ceo@enako.com and Password is Enako@2025!');
-          }
+        const res = await onLogin({
+          emailOrPhone: trimmedEmail,
+          password,
+          role: 'CEO / Executive Manager',
+          remember: true,
+        });
+        if (!res.success) {
+          setErrorMsg(res.error || 'Invalid executive credentials.');
         }
       } else {
         // Collector / Senior Cash Officer Login (Phone/Terminal ID + PIN)
@@ -66,7 +55,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onSignUp, current
           return;
         }
 
-        const res = onLogin({
+        const res = await onLogin({
           emailOrPhone: phoneOrTerminal.trim(),
           password: pinCode,
           role: loginRole === 'SENIOR' ? 'Senior Cash Officer' : 'Field Cash Collector',
@@ -120,8 +109,8 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onSignUp, current
                   setLoginRole(val);
                   setErrorMsg(null);
                   if (val === 'CEO') {
-                    setEmail('ceo@enako.com');
-                    setPassword('Enako@2025!');
+                    setEmail('');
+                    setPassword('');
                   } else {
                     setPhoneOrTerminal('');
                     setPinCode('');
@@ -168,7 +157,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onSignUp, current
                       required
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      placeholder="Enako@2025!"
+                      placeholder="Enter your password"
                       className="block w-full h-12 pl-10 pr-11 border border-[#e5e5e5] bg-[#ffffff] text-[#1a1c1c] font-mono text-sm focus:border-[#0891b2] focus:outline-none focus:ring-1 focus:ring-[#0891b2]"
                     />
                     <button

@@ -14,6 +14,7 @@ import {
   TrendingUp
 } from 'lucide-react';
 import { ViewType, CollectorUser } from '../types';
+import { hasOperationalAccess } from '../utils/permissions';
 
 interface SidebarProps {
   currentView: ViewType;
@@ -36,14 +37,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   mobileOpen = false,
   onCloseMobile,
 }) => {
-  const isCeoOrManager = 
-    user?.role === 'CEO / Senior Manager' || 
-    user?.email === 'ceo@enako.com' || 
-    user?.role === 'CEO' || 
-    user?.role === 'CEO / Executive Manager' ||
-    user?.role === 'Senior Manager' || 
-    user?.role === 'Senior Cash Officer' ||
-    user?.role === 'Branch Operations Lead';
+  const hasFullOperationalAccess = hasOperationalAccess(user);
 
   const allNavItems = [
     {
@@ -89,7 +83,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   ];
 
   // Collectors see Dashboard, New Collection, and Collection History
-  const navItems = isCeoOrManager 
+  const navItems = hasFullOperationalAccess
     ? allNavItems 
     : allNavItems.filter((item) => ['dashboard', 'new-collection', 'history'].includes(item.id));
 

@@ -35,7 +35,7 @@ interface CollectorsViewProps {
   accounts: UserAccount[];
   collections: Collection[];
   currentUser: CollectorUser;
-  onAddAccount: (account: Omit<UserAccount, 'id' | 'createdAt'>) => void;
+  onAddAccount?: (account: Omit<UserAccount, 'id' | 'createdAt'>) => void;
   onDeleteAccount?: (id: string) => void;
   onDeleteAllAccounts?: () => void;
   onShowToast: (msg: string, type?: 'success' | 'info' | 'error') => void;
@@ -68,7 +68,7 @@ export const CollectorsView: React.FC<CollectorsViewProps> = ({
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
-  const [password, setPassword] = useState('123456');
+  const [password, setPassword] = useState('');
   const [branch, setBranch] = useState('Douala Main Hub');
   const [role, setRole] = useState('Field Cash Collector');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -202,7 +202,7 @@ export const CollectorsView: React.FC<CollectorsViewProps> = ({
 
   const handleRegister = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!firstName.trim() || !lastName.trim() || !email.trim()) {
+    if (!firstName.trim() || !lastName.trim() || !email.trim() || !password.trim()) {
       onShowToast('Please fill out all required fields.', 'error');
       return;
     }
@@ -211,13 +211,13 @@ export const CollectorsView: React.FC<CollectorsViewProps> = ({
     const generatedTerminalId = `TRM-${Math.floor(1000 + Math.random() * 9000)}`;
 
     setTimeout(() => {
-      onAddAccount({
+      onAddAccount?.({
         firstName: firstName.trim(),
         lastName: lastName.trim(),
         fullName: `${firstName.trim()} ${lastName.trim()}`,
         email: email.trim().toLowerCase(),
         phone: phone.trim() || '+237 600000000',
-        password: password || '123456',
+        password: password.trim(),
         branch,
         role,
         terminalId: generatedTerminalId,
@@ -228,7 +228,7 @@ export const CollectorsView: React.FC<CollectorsViewProps> = ({
       setLastName('');
       setEmail('');
       setPhone('');
-      setPassword('123456');
+      setPassword('');
       setIsSubmitting(false);
       setIsAddModalOpen(false);
       onShowToast(`New Collector ${firstName} (${generatedTerminalId}) registered successfully!`, 'success');
@@ -605,13 +605,15 @@ export const CollectorsView: React.FC<CollectorsViewProps> = ({
             </button>
           )}
 
-          <button
-            onClick={() => setIsAddModalOpen(true)}
-            className="px-6 py-2.5 bg-[#0891b2] hover:bg-[#0e7490] text-white text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-xs"
-          >
-            <UserPlus className="w-4 h-4" />
-            <span>Register New Collector</span>
-          </button>
+          {onAddAccount && (
+            <button
+              onClick={() => setIsAddModalOpen(true)}
+              className="px-6 py-2.5 bg-[#0891b2] hover:bg-[#0e7490] text-white text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-xs"
+            >
+              <UserPlus className="w-4 h-4" />
+              <span>Register New Collector</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -683,7 +685,7 @@ export const CollectorsView: React.FC<CollectorsViewProps> = ({
           <div className="col-span-full p-12 bg-white border border-[#e5e5e5] text-center text-sm text-[#595959]">
             <Users className="w-8 h-8 text-[#0891b2] mx-auto mb-2" />
             <p className="font-bold">No collectors registered yet.</p>
-            <p className="text-xs mt-1">Click "Register New Collector" above to create a collector terminal profile.</p>
+            <p className="text-xs mt-1">No collector terminal profiles match the current view.</p>
           </div>
         ) : (
           filteredAccounts.map((acc) => {
@@ -775,7 +777,7 @@ export const CollectorsView: React.FC<CollectorsViewProps> = ({
       </div>
 
       {/* Modal: Register New Collector */}
-      {isAddModalOpen && (
+      {isAddModalOpen && onAddAccount && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
           <div className="bg-white border border-[#e5e5e5] w-full max-w-lg shadow-xl">
             <div className="p-5 border-b border-[#e5e5e5] flex justify-between items-center">
@@ -793,7 +795,7 @@ export const CollectorsView: React.FC<CollectorsViewProps> = ({
                 <div>
                   <label className="block text-[10px] font-bold uppercase tracking-wider text-[#595959] mb-1">First Name *</label>
                   <input
-                    type="text"
+                    type="password"
                     required
                     value={firstName}
                     onChange={(e) => setFirstName(e.target.value)}
@@ -864,7 +866,6 @@ export const CollectorsView: React.FC<CollectorsViewProps> = ({
                   >
                     <option value="Field Cash Collector">Field Cash Collector</option>
                     <option value="Senior Cash Officer">Senior Cash Officer</option>
-                    <option value="Branch Operations Lead">Branch Operations Lead</option>
                   </select>
                 </div>
 

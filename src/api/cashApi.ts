@@ -335,40 +335,35 @@ export async function settleRemoteTransaction(id: string, charges?: number): Pro
   }
 }
 
-export async function ensureAdminToken(forceRefresh = false): Promise<string | null> {
-  let token: string | null = null;
-  if (!forceRefresh) {
-    try {
-      token =
-        sessionStorage.getItem('enako_access_token') ||
-        localStorage.getItem('enako_access_token') ||
-        localStorage.getItem('access_token');
-    } catch (e) {}
-
-    if (token) return token;
-  }
-
+export async function authenticatePortalUser(email: string, password: string): Promise<{ success: boolean; error?: string }> {
   try {
     const res = await fetch(`${API_BASE_URL}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: 'ceo@enako.com', password: 'Enako@2025!' }),
+      body: JSON.stringify({ email, password }),
     });
-    if (res.ok) {
-      const data = await res.json();
-      if (data.accessToken) {
-        token = data.accessToken;
-        try {
-          localStorage.setItem('enako_access_token', token as string);
-          sessionStorage.setItem('enako_access_token', token as string);
-        } catch (e) {}
-        return token;
-      }
-    }
-  } catch (err) {
-    console.warn('Auto-admin auth note:', err);
+    if (!res.ok) return { success: false, error: 'Invalid email, terminal ID, or password.' };
+
+    const data = await res.json();
+    if (!data.accessToken) return { success: false, error: 'The server did not return a valid session.' };
+    localStorage.setItem('enako_access_token', data.accessToken);
+    sessionStorage.setItem('enako_access_token', data.accessToken);
+    return { success: true };
+  } catch (error) {
+    console.warn('Portal authentication notice:', error);
+    return { success: false, error: 'Unable to reach the authentication service.' };
   }
-  return null;
+}
+
+export async function ensureAdminToken(): Promise<string | null> {
+  let token: string | null = null;
+  try {
+    token =
+      sessionStorage.getItem('enako_access_token') ||
+      localStorage.getItem('enako_access_token') ||
+      localStorage.getItem('access_token');
+  } catch (e) {}
+  return token;
 }
 
 const getAuthHeaders = (): Record<string, string> => {
@@ -410,7 +405,7 @@ export async function fetchRemoteKycSubmissions(params?: {
     let res = await fetch(mainEndpoint, { headers });
     // If 401 or 403, refresh CEO token and retry immediately
     if (res.status === 401 || res.status === 403) {
-      const freshToken = await ensureAdminToken(true);
+      const freshToken = await ensureAdminToken();
       if (freshToken) {
         headers = { ...headers, Authorization: `Bearer ${freshToken}` };
         res = await fetch(mainEndpoint, { headers });
@@ -704,5 +699,4 @@ export async function sendKycDecisionNotificationEmail(
     return true;
   }
 }
-
 

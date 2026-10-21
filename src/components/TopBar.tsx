@@ -17,6 +17,7 @@ interface TopBarProps {
   onNavigate: (view: ViewType) => void;
   user: CollectorUser;
   onOpenSettings: () => void;
+  canConfigureSystem?: boolean;
   onOpenProfile: () => void;
   onOpenMobileMenu: () => void;
   globalSearch: string;
@@ -29,6 +30,7 @@ export const TopBar: React.FC<TopBarProps> = ({
   onNavigate,
   user,
   onOpenSettings,
+  canConfigureSystem = true,
   onOpenProfile,
   onOpenMobileMenu,
   globalSearch,
@@ -117,14 +119,16 @@ export const TopBar: React.FC<TopBarProps> = ({
           </div>
 
           {/* Settings Button */}
-          <button
-            onClick={onOpenSettings}
-            className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center text-[#0891b2] hover:bg-[#eeeeee] transition-colors"
-            title="Terminal Settings & Diagnostics"
-            aria-label="Settings"
-          >
-            <SettingsIcon className="w-4 h-4" />
-          </button>
+          {canConfigureSystem && (
+            <button
+              onClick={onOpenSettings}
+              className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center text-[#0891b2] hover:bg-[#eeeeee] transition-colors"
+              title="Terminal Settings & Diagnostics"
+              aria-label="Settings"
+            >
+              <SettingsIcon className="w-4 h-4" />
+            </button>
+          )}
 
           {/* Account Profile Button */}
           <button

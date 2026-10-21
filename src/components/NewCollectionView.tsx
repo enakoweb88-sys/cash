@@ -15,6 +15,7 @@ import {
   RotateCw
 } from 'lucide-react';
 import { Client, Collection, TransactionStatus, ViewType, TransactionType, DepositDestination, UserAccount, CollectorUser } from '../types';
+import { hasOperationalAccess } from '../utils/permissions';
 import { formatXAF, formatCommaNumber, cleanCommas } from '../data/mockData';
 
 interface NewCollectionViewProps {
@@ -36,7 +37,7 @@ export const NewCollectionView: React.FC<NewCollectionViewProps> = ({
   onNavigate,
   isOffline,
 }) => {
-  const isCeoOrManager = currentUser?.role === 'CEO / Senior Manager' || currentUser?.email === 'ceo@enako.com' || currentUser?.role === 'CEO' || currentUser?.role === 'Senior Manager' || currentUser?.role === 'Branch Operations Lead';
+  const isCeoOrManager = hasOperationalAccess(currentUser);
 
   const [selectedClient, setSelectedClient] = useState<Client | null>(initialSelectedClient || null);
   const [clientEmail, setClientEmail] = useState<string>(initialSelectedClient?.email || '');

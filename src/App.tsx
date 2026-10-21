@@ -39,10 +39,17 @@ import {
   createRemoteCollector,
   deleteRemoteCollector,
   deleteAllRemoteCollectors,
-  ensureAdminToken
+  authenticatePortalUser
 } from './api/cashApi';
 import { generateReceiptPdfBase64 } from './utils/exportUtils';
 import { CheckCircle2, AlertCircle, RefreshCw } from 'lucide-react';
+import {
+  canConfigureSystem,
+  canEditExistingRecords,
+  canManageCollectors,
+  hasOperationalAccess,
+  normalizeCollectorRole,
+} from './utils/permissions';
 
 const VALID_VIEWS: ViewType[] = [
   'dashboard',
@@ -134,8 +141,7 @@ export default function App() {
 
   // Ensure field collectors stay within authorized views
   useEffect(() => {
-    const isCeoOrManager = user?.role === 'CEO / Senior Manager' || user?.email === 'ceo@enako.com' || user?.role === 'CEO' || user?.role === 'Senior Manager' || user?.role === 'Branch Operations Lead';
-    if (!isCeoOrManager && !['dashboard', 'new-collection', 'history'].includes(currentView)) {
+    if (!hasOperationalAccess(user) && !['dashboard', 'new-collection', 'history'].includes(currentView)) {
       setCurrentView('dashboard');
     }
   }, [user, currentView]);
@@ -154,7 +160,10 @@ export default function App() {
   });
 
   // Role guard logic: Check if user is CEO or Manager
-  const isCeoOrManager = user?.role === 'CEO / Senior Manager' || user?.email === 'ceo@enako.com' || user?.role === 'CEO' || user?.role === 'Senior Manager' || user?.role === 'Branch Operations Lead';
+  const hasFullOperationalAccess = hasOperationalAccess(user);
+  const mayEditExistingRecords = canEditExistingRecords(user);
+  const mayManageCollectors = canManageCollectors(user);
+  const mayConfigureSystem = canConfigureSystem(user);
 
   // Selected client when navigating from Clients -> New Collection
   const [selectedClientForCollection, setSelectedClientForCollection] = useState<Client | null>(null);
@@ -169,12 +178,12 @@ export default function App() {
 
   // Guard restricted routes for Cash Collectors
   useEffect(() => {
-    if (user.isLoggedIn && !isCeoOrManager) {
+    if (user.isLoggedIn && !hasFullOperationalAccess) {
       if (['clients', 'collectors', 'transactions', 'create-transaction', 'update-rates', 'kyc'].includes(currentView)) {
         setCurrentView('dashboard');
       }
     }
-  }, [currentView, isCeoOrManager, user.isLoggedIn]);
+  }, [currentView, hasFullOperationalAccess, user.isLoggedIn]);
 
   // Global search
   const [globalSearch, setGlobalSearch] = useState('');
@@ -288,11 +297,16 @@ export default function App() {
   };
 
   // Login handler
-  const handleLogin = (credentials: { emailOrPhone: string; password?: string; role?: string; remember: boolean }): { success: boolean; error?: string } => {
+  const handleLogin = async (credentials: { emailOrPhone: string; password?: string; role?: string; remember: boolean }): Promise<{ success: boolean; error?: string }> => {
     const term = credentials.emailOrPhone.trim().toLowerCase();
+    if (!credentials.password) {
+      return { success: false, error: 'Password is required.' };
+    }
     
     // 1. CEO / Executive Manager Authentication
-    if (term === 'ceo@enako.com' && (credentials.password === 'Enako@2025!' || !credentials.password)) {
+    if (term === 'ceo@enako.com') {
+      const auth = await authenticatePortalUser(term, credentials.password);
+      if (!auth.success) return auth;
       const ceoUser: CollectorUser = {
         id: 'ACC-CEO-01',
         name: 'ENAKO CEO',
@@ -321,9 +335,8 @@ export default function App() {
       return { success: false, error: 'No collector account found matching phone / email / terminal ID.' };
     }
 
-    if (credentials.password && match.password && credentials.password !== match.password && credentials.password !== '123456' && credentials.password !== 'password123') {
-      return { success: false, error: 'Incorrect PIN / password. Please verify and try again.' };
-    }
+    const auth = await authenticatePortalUser(match.email, credentials.password);
+    if (!auth.success) return auth;
 
     const loggedInUser: CollectorUser = {
       id: match.id,
@@ -370,9 +383,9 @@ export default function App() {
       fullName,
       email: emailLower,
       phone: userData.phone,
-      password: userData.password || 'password123',
+      password: userData.password,
       branch: userData.branch || 'Douala Main Hub',
-      role: userData.role || 'Field Cash Collector',
+      role: normalizeCollectorRole(userData.role),
       terminalId: newTerminalId,
       createdAt: new Date().toISOString(),
     };
@@ -388,7 +401,7 @@ export default function App() {
       phone: userData.phone,
       terminalId: newTerminalId,
       branch: userData.branch || 'Douala Main Hub',
-      role: userData.role || 'Field Cash Collector',
+      role: normalizeCollectorRole(userData.role),
       avatarLetter: userData.firstName[0] ? userData.firstName[0].toUpperCase() : 'C',
       isLoggedIn: true,
     };
@@ -741,7 +754,10 @@ export default function App() {
             setCurrentView(view);
           }}
           user={user}
-          onOpenSettings={() => setIsSettingsModalOpen(true)}
+          onOpenSettings={() => {
+            if (mayConfigureSystem) setIsSettingsModalOpen(true);
+          }}
+          canConfigureSystem={mayConfigureSystem}
           onOpenProfile={() => setIsProfileModalOpen(true)}
           onOpenMobileMenu={() => setMobileMenuOpen(true)}
           onLogout={handleLogout}
@@ -785,9 +801,9 @@ export default function App() {
                 setCurrentView(view);
               }}
               onSelectCollection={(col) => setActiveReceipt(col)}
-              onOpenStatusUpdate={(col) => setStatusUpdateCollection(col)}
+              onOpenStatusUpdate={mayEditExistingRecords ? (col) => setStatusUpdateCollection(col) : undefined}
               onOpenReport={() => setIsReportModalOpen(true)}
-              onUpdateCollectionPhoto={handleUpdateCollectionPhoto}
+              onUpdateCollectionPhoto={mayEditExistingRecords ? handleUpdateCollectionPhoto : undefined}
             />
           )}
 
@@ -816,9 +832,9 @@ export default function App() {
               accounts={accounts}
               collections={collections}
               currentUser={user}
-              onAddAccount={handleAddAccount}
-              onDeleteAccount={handleDeleteAccount}
-              onDeleteAllAccounts={handleDeleteAllAccounts}
+              onAddAccount={mayManageCollectors ? handleAddAccount : undefined}
+              onDeleteAccount={mayManageCollectors ? handleDeleteAccount : undefined}
+              onDeleteAllAccounts={mayManageCollectors ? handleDeleteAllAccounts : undefined}
               onShowToast={showToast}
               onNavigate={setCurrentView}
             />
@@ -830,7 +846,7 @@ export default function App() {
               user={user}
               clients={clients}
               onSelectCollection={(col) => setActiveReceipt(col)}
-              onOpenStatusUpdate={(col) => setStatusUpdateCollection(col)}
+              onOpenStatusUpdate={mayEditExistingRecords ? (col) => setStatusUpdateCollection(col) : undefined}
               onOpenReport={() => setIsReportModalOpen(true)}
             />
           )}
@@ -891,7 +907,7 @@ export default function App() {
         />
       )}
 
-      {isSettingsModalOpen && (
+      {isSettingsModalOpen && mayConfigureSystem && (
         <SettingsModal
           user={user}
           isOffline={false}

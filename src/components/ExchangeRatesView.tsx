@@ -10,6 +10,7 @@ import {
   CheckCircle2
 } from 'lucide-react';
 import { ViewType, CollectorUser, ExchangeRateItem } from '../types';
+import { canEditExistingRecords } from '../utils/permissions';
 
 export const INITIAL_CURRENCIES: Record<string, ExchangeRateItem> = {
   USD: { code: 'USD', name: 'US Dollar', flag: '💵', buyingRate: '615', sellingRate: '625', change24h: 0.8 },
@@ -48,6 +49,7 @@ export const ExchangeRatesView: React.FC<ExchangeRatesViewProps> = ({
   onNavigate,
   onShowToast,
 }) => {
+  const canEditRates = canEditExistingRecords(user);
   const [rates, setRates] = useState<Record<string, ExchangeRateItem>>(() => getStoredRates());
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -78,6 +80,10 @@ export const ExchangeRatesView: React.FC<ExchangeRatesViewProps> = ({
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canEditRates) {
+      onShowToast('Senior Cash Officers can view rates but cannot change them.', 'info');
+      return;
+    }
     setSaving(true);
     setTimeout(() => {
       const updated: Record<string, ExchangeRateItem> = { ...rates };
@@ -136,6 +142,11 @@ export const ExchangeRatesView: React.FC<ExchangeRatesViewProps> = ({
 
       {/* Main Rates Form */}
       <form onSubmit={handleSave} className="bg-white border border-[#e5e5e5] shadow-xs p-6 space-y-6">
+        {!canEditRates && (
+          <div className="border border-[#bae6fd] bg-[#f0f9ff] px-4 py-3 text-xs font-bold text-[#075985]">
+            Read-only access. Exchange-rate changes are restricted to the CEO.
+          </div>
+        )}
         <div className="space-y-4">
           {rateList.map((curr) => {
             const buying = Number(editForm[curr.code]?.buyingRate || 0);
@@ -169,6 +180,7 @@ export const ExchangeRatesView: React.FC<ExchangeRatesViewProps> = ({
                     </label>
                     <input
                       type="text"
+                      disabled={!canEditRates}
                       value={editForm[curr.code]?.buyingRate || ''}
                       onChange={(e) =>
                         setEditForm({
@@ -176,7 +188,7 @@ export const ExchangeRatesView: React.FC<ExchangeRatesViewProps> = ({
                           [curr.code]: { ...editForm[curr.code], buyingRate: e.target.value },
                         })
                       }
-                      className="w-full px-3 py-2 text-xs font-bold text-[#1a1c1c] border border-[#d6d6d6] focus:border-[#0891b2] outline-none bg-white font-mono"
+                      className="w-full px-3 py-2 text-xs font-bold text-[#1a1c1c] border border-[#d6d6d6] focus:border-[#0891b2] outline-none bg-white font-mono disabled:bg-[#eeeeee] disabled:cursor-not-allowed"
                       placeholder={curr.code === 'NGN' ? 'e.g. 400' : 'Enter buying rate...'}
                     />
                   </div>
@@ -187,6 +199,7 @@ export const ExchangeRatesView: React.FC<ExchangeRatesViewProps> = ({
                     </label>
                     <input
                       type="text"
+                      disabled={!canEditRates}
                       value={editForm[curr.code]?.sellingRate || ''}
                       onChange={(e) =>
                         setEditForm({
@@ -194,7 +207,7 @@ export const ExchangeRatesView: React.FC<ExchangeRatesViewProps> = ({
                           [curr.code]: { ...editForm[curr.code], sellingRate: e.target.value },
                         })
                       }
-                      className="w-full px-3 py-2 text-xs font-bold text-[#166534] border border-[#d6d6d6] focus:border-[#0891b2] outline-none bg-white font-mono"
+                      className="w-full px-3 py-2 text-xs font-bold text-[#166534] border border-[#d6d6d6] focus:border-[#0891b2] outline-none bg-white font-mono disabled:bg-[#eeeeee] disabled:cursor-not-allowed"
                       placeholder={curr.code === 'NGN' ? 'e.g. 420' : 'Enter selling rate...'}
                     />
                   </div>
@@ -225,14 +238,16 @@ export const ExchangeRatesView: React.FC<ExchangeRatesViewProps> = ({
           >
             Cancel
           </button>
-          <button
-            type="submit"
-            disabled={saving}
-            className="px-6 py-2.5 bg-[#0891b2] hover:bg-[#0e7490] text-white text-xs font-bold uppercase tracking-wider shadow-xs disabled:opacity-50 flex items-center gap-2 cursor-pointer"
-          >
-            <Save className="w-4 h-4" />
-            <span>{saving ? 'Saving Rates...' : 'Save Exchange Rates'}</span>
-          </button>
+          {canEditRates && (
+            <button
+              type="submit"
+              disabled={saving}
+              className="px-6 py-2.5 bg-[#0891b2] hover:bg-[#0e7490] text-white text-xs font-bold uppercase tracking-wider shadow-xs disabled:opacity-50 flex items-center gap-2 cursor-pointer"
+            >
+              <Save className="w-4 h-4" />
+              <span>{saving ? 'Saving Rates...' : 'Save Exchange Rates'}</span>
+            </button>
+          )}
         </div>
       </form>
     </div>
