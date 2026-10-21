@@ -218,8 +218,7 @@ export default function App() {
 
   // Load manually registered clients from the shared database on every device.
   useEffect(() => {
-    fetchRemoteClients().then((remoteClients) => {
-      if (!remoteClients.length) return;
+    fetchRemoteClients().then(async (remoteClients) => {
       setClients((previous) => {
         const merged = [...previous];
         for (const remoteClient of remoteClients) {
@@ -229,6 +228,13 @@ export default function App() {
         }
         return merged;
       });
+
+      // Backfill manual clients created before shared persistence was introduced.
+      const remoteIds = new Set(remoteClients.map((client) => client.id));
+      const unsyncedManualClients = clients.filter(
+        (client) => !client.kycId && !remoteIds.has(client.id)
+      );
+      await Promise.all(unsyncedManualClients.map((client) => createRemoteClient(client)));
     });
   }, []);
 
