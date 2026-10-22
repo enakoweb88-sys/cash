@@ -42,9 +42,9 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onSignUp, current
           setErrorMsg(res.error || 'Invalid executive credentials.');
         }
       } else {
-        // Collector / Senior Cash Officer Login (Phone/Terminal ID + PIN)
+        // Collector / Senior Cash Officer Login (Phone/Terminal ID/Email + PIN)
         if (!phoneOrTerminal.trim()) {
-          setErrorMsg('Please enter your Phone Number or Terminal ID.');
+          setErrorMsg('Please enter your Phone Number, Terminal ID, or Email.');
           setIsLoading(false);
           return;
         }
@@ -175,7 +175,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onSignUp, current
               <>
                 <div className="space-y-1.5">
                   <label htmlFor="phone-terminal" className="block text-[11px] font-bold tracking-wider text-[#4a4a4a] uppercase">
-                    Phone Number or Terminal ID *
+                    Phone Number, Terminal ID, or Email *
                   </label>
                   <div className="relative">
                     <Phone className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-[#5f5e5e]" />
@@ -185,7 +185,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onSignUp, current
                       required
                       value={phoneOrTerminal}
                       onChange={(e) => setPhoneOrTerminal(e.target.value)}
-                      placeholder="e.g. +237 6XX XX XX XX or TRM-9821"
+                      placeholder="e.g. +237 6XX XX XX XX, TRM-3364, or email"
                       className="block w-full h-12 pl-10 pr-3.5 border border-[#e5e5e5] bg-[#ffffff] text-[#1a1c1c] text-sm focus:border-[#0891b2] focus:outline-none focus:ring-1 focus:ring-[#0891b2]"
                     />
                   </div>
