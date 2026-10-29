@@ -823,7 +823,7 @@ export default function App() {
       />
 
       {/* Main Content Column */}
-      <div className="flex-1 flex flex-col md:ml-64 min-h-screen bg-[#f9f9f9] relative">
+      <div className="flex-1 flex flex-col md:ml-64 min-h-screen bg-[#f9f9f9] relative min-w-0">
         {/* Top Header Bar */}
         <TopBar
           currentView={currentView}
@@ -871,7 +871,7 @@ export default function App() {
         )}
 
         {/* Active Page View */}
-        <main className="flex-1 p-3 sm:p-6 lg:p-10 overflow-y-auto">
+        <main className="flex-1 p-3 sm:p-6 lg:p-10 overflow-y-auto min-w-0">
           {currentView === 'dashboard' && (
             <DashboardView
               collections={collections}

@@ -241,4 +241,4 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onSignUp, current
       </main>
     </div>
   );
-};
+};  

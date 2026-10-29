@@ -109,9 +109,9 @@ export const ExchangeRatesView: React.FC<ExchangeRatesViewProps> = ({
   const rateList: ExchangeRateItem[] = Object.values(rates);
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6 pb-24 font-sans">
+    <div className="w-full min-w-0 max-w-5xl mx-auto space-y-5 pb-12 font-sans">
       {/* Top Header */}
-      <div className="bg-white p-6 border border-[#e5e5e5] shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#e5e5e5] pb-4">
         <div>
           <button
             onClick={() => onNavigate('transactions')}
@@ -120,11 +120,11 @@ export const ExchangeRatesView: React.FC<ExchangeRatesViewProps> = ({
             <ArrowLeft className="w-4 h-4" />
             <span>Back to FX Transactions</span>
           </button>
-          <h2 className="text-2xl font-bold text-[#1a1c1c] tracking-tight">
-            Market Command & Exchange Rate Matrix
+          <h2 className="text-xl font-semibold text-[#1a1c1c]">
+            Exchange rates
           </h2>
           <p className="text-xs text-[#595959] mt-0.5">
-            Configure live market buying and selling exchange rates for Naira, USDT, Dollar, Euro, GBP & Yuan.
+            Buying and selling rates in FCFA. NGN is quoted per 1,000 NGN.
           </p>
         </div>
 
@@ -135,19 +135,30 @@ export const ExchangeRatesView: React.FC<ExchangeRatesViewProps> = ({
             className="px-4 py-2 bg-white hover:bg-[#f2f2f2] border border-[#d6d6d6] text-[#1a1c1c] text-xs font-bold uppercase tracking-wider flex items-center gap-2 transition-colors cursor-pointer"
           >
             <RefreshCw className={`w-4 h-4 text-[#0891b2] ${loading ? 'animate-spin' : ''}`} />
-            <span>Refresh Matrix</span>
+            <span>Refresh</span>
           </button>
         </div>
       </div>
 
       {/* Main Rates Form */}
-      <form onSubmit={handleSave} className="bg-white border border-[#e5e5e5] shadow-xs p-6 space-y-6">
+      <form onSubmit={handleSave} className="min-w-0 space-y-4">
         {!canEditRates && (
           <div className="border border-[#bae6fd] bg-[#f0f9ff] px-4 py-3 text-xs font-bold text-[#075985]">
             Read-only access. Exchange-rate changes are restricted to the CEO.
           </div>
         )}
-        <div className="space-y-4">
+        <div className="overflow-x-auto border border-[#e5e5e5] bg-white" role="region" aria-label="Exchange rates" tabIndex={0}>
+          <table className="w-full table-fixed min-w-[280px] text-left text-sm">
+            <caption className="sr-only">Exchange rates in FCFA; NGN rates are per 1,000 NGN.</caption>
+            <thead className="border-b border-[#e5e5e5] bg-[#f3f3f3] text-xs text-[#595959]">
+              <tr>
+                <th scope="col" className="w-[30%] px-2 sm:px-4 py-3 font-semibold">Currency</th>
+                <th scope="col" className="w-[23%] px-1 sm:px-3 py-3 font-semibold">Buy</th>
+                <th scope="col" className="w-[23%] px-1 sm:px-3 py-3 font-semibold">Sell</th>
+                <th scope="col" className="w-[24%] px-2 sm:px-4 py-3 text-right font-semibold">Spread</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#e5e5e5]">
           {rateList.map((curr) => {
             const buying = Number(editForm[curr.code]?.buyingRate || 0);
             const selling = Number(editForm[curr.code]?.sellingRate || 0);
@@ -155,31 +166,23 @@ export const ExchangeRatesView: React.FC<ExchangeRatesViewProps> = ({
             const isPositive = curr.change24h >= 0;
 
             return (
-              <div
+              <tr
                 key={curr.code}
-                className="p-4 bg-[#f9f9f9] border border-[#e5e5e5] flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+                className="align-middle hover:bg-[#f9f9f9]"
               >
                 {/* Currency Identity */}
-                <div className="flex items-center gap-3 sm:w-56 shrink-0">
-                  <span className="text-3xl leading-none">{curr.flag}</span>
-                  <div>
-                    <p className="font-bold text-[#1a1c1c] text-sm leading-tight">
-                      {curr.code} <span className="text-xs font-normal text-[#595959]">({curr.name})</span>
-                    </p>
-                    <p className="text-[10px] font-bold text-[#0891b2] uppercase tracking-wider mt-0.5">
-                      {curr.code === 'NGN' ? 'NGN per 1,000 FCFA' : `1 ${curr.code} : FCFA`}
-                    </p>
-                  </div>
-                </div>
+                <th scope="row" className="px-2 sm:px-4 py-3 font-normal">
+                  <span className="block text-sm font-semibold text-[#1a1c1c]">{curr.code}</span>
+                  <span className="hidden sm:block mt-1 text-xs text-[#595959] break-words">{curr.name}</span>
+                  {curr.code === 'NGN' && <span className="block mt-1 text-[10px] text-[#595959]">per 1,000</span>}
+                </th>
 
                 {/* Input Fields */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 flex-1 max-w-md">
-                  <div>
-                    <label className="block text-[10px] font-bold text-[#595959] uppercase tracking-wider mb-1">
-                      Buying Rate {curr.code === 'NGN' ? '(FCFA / 1,000 NGN)' : '(FCFA)'}
-                    </label>
+                  <td className="px-1 sm:px-3 py-3">
                     <input
                       type="text"
+                      inputMode="decimal"
+                      aria-label={`${curr.code} buying rate in FCFA${curr.code === 'NGN' ? ' per 1,000 NGN' : ''}`}
                       disabled={!canEditRates}
                       value={editForm[curr.code]?.buyingRate || ''}
                       onChange={(e) =>
@@ -188,17 +191,15 @@ export const ExchangeRatesView: React.FC<ExchangeRatesViewProps> = ({
                           [curr.code]: { ...editForm[curr.code], buyingRate: e.target.value },
                         })
                       }
-                      className="w-full px-3 py-2 text-xs font-bold text-[#1a1c1c] border border-[#d6d6d6] focus:border-[#0891b2] outline-none bg-white font-mono disabled:bg-[#eeeeee] disabled:cursor-not-allowed"
-                      placeholder={curr.code === 'NGN' ? 'e.g. 400' : 'Enter buying rate...'}
+                      className="min-w-0 w-full h-11 px-1.5 sm:px-3 text-base font-medium text-[#1a1c1c] border border-[#d6d6d6] focus:border-[#0891b2] outline-none bg-white tabular-nums disabled:bg-[#eeeeee] disabled:cursor-not-allowed"
                     />
-                  </div>
+                  </td>
 
-                  <div>
-                    <label className="block text-[10px] font-bold text-[#595959] uppercase tracking-wider mb-1">
-                      Selling Rate {curr.code === 'NGN' ? '(FCFA / 1,000 NGN)' : '(FCFA)'}
-                    </label>
+                  <td className="px-1 sm:px-3 py-3">
                     <input
                       type="text"
+                      inputMode="decimal"
+                      aria-label={`${curr.code} selling rate in FCFA${curr.code === 'NGN' ? ' per 1,000 NGN' : ''}`}
                       disabled={!canEditRates}
                       value={editForm[curr.code]?.sellingRate || ''}
                       onChange={(e) =>
@@ -207,30 +208,29 @@ export const ExchangeRatesView: React.FC<ExchangeRatesViewProps> = ({
                           [curr.code]: { ...editForm[curr.code], sellingRate: e.target.value },
                         })
                       }
-                      className="w-full px-3 py-2 text-xs font-bold text-[#166534] border border-[#d6d6d6] focus:border-[#0891b2] outline-none bg-white font-mono disabled:bg-[#eeeeee] disabled:cursor-not-allowed"
-                      placeholder={curr.code === 'NGN' ? 'e.g. 420' : 'Enter selling rate...'}
+                      className="min-w-0 w-full h-11 px-1.5 sm:px-3 text-base font-medium text-[#166534] border border-[#d6d6d6] focus:border-[#0891b2] outline-none bg-white tabular-nums disabled:bg-[#eeeeee] disabled:cursor-not-allowed"
                     />
-                  </div>
-                </div>
+                  </td>
 
                 {/* Spread Margin Preview */}
-                <div className="sm:text-right shrink-0 sm:w-32 bg-white p-2.5 border border-[#e5e5e5]">
-                  <p className="text-[9px] font-bold text-[#595959] uppercase tracking-wider">Spread Margin</p>
-                  <p className="text-xs font-black text-[#1a1c1c] mt-0.5">
-                    {spread !== null ? `+${spread} XAF` : '—'}
+                <td className="px-2 sm:px-4 py-3 text-right">
+                  <p className="text-xs font-semibold text-[#1a1c1c] tabular-nums [overflow-wrap:anywhere]">
+                    {spread !== null ? `+${spread}` : '-'}
                   </p>
                   <span className={`inline-flex items-center gap-0.5 text-[9px] font-bold mt-1 ${isPositive ? 'text-[#16a34a]' : 'text-[#dc2626]'}`}>
                     {isPositive ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
                     <span>{isPositive ? `+${curr.change24h}%` : `${curr.change24h}%`}</span>
                   </span>
-                </div>
-              </div>
+                </td>
+              </tr>
             );
           })}
+            </tbody>
+          </table>
         </div>
 
         {/* Action Buttons */}
-        <div className="pt-4 border-t border-[#e5e5e5] flex items-center justify-end gap-3">
+        <div className="pt-4 border-t border-[#e5e5e5] flex flex-wrap items-center justify-end gap-3">
           <button
             type="button"
             onClick={() => onNavigate('transactions')}

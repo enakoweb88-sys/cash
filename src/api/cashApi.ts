@@ -415,6 +415,25 @@ const getAuthHeaders = (): Record<string, string> => {
 // Real KYC Submissions loaded dynamically from Backend API / Database
 const REAL_DATABASE_KYC_RECORDS: any[] = [];
 
+export async function fetchKycDocument(fileUrl: string): Promise<Blob> {
+  if (!fileUrl) throw new Error('This document has no file URL. Please request a new upload.');
+  const url = new URL(fileUrl, `${new URL(API_BASE_URL).origin}/`);
+  if (!['http:', 'https:'].includes(url.protocol)) {
+    throw new Error('This document has an invalid file URL.');
+  }
+  // Stored public URLs do not require the new backend route or an API token.
+  let response: Response;
+  try {
+    response = await fetch(url.href);
+  } catch {
+    throw new Error('Cannot reach document storage. Check your connection and that the Supabase project is running.');
+  }
+  if (!response.ok) {
+    throw new Error(`Unable to retrieve this document (HTTP ${response.status}). Check that the file exists and its storage access is configured correctly.`);
+  }
+  return response.blob();
+}
+
 
 export async function fetchRemoteKycSubmissions(params?: {
   status?: string;

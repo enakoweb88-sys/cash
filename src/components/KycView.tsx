@@ -12,7 +12,9 @@ import {
   ArrowLeft
 } from 'lucide-react';
 import { KycSubmission, CollectorUser } from '../types';
-import { fetchRemoteKycSubmissions, reviewRemoteKycSubmission, sendKycDecisionNotificationEmail } from '../api/cashApi';
+import { fetchRemoteKycSubmissions, reviewRemoteKycSubmission, sendKycDecisionNotificationEmail, fetchKycDocument } from '../api/cashApi';
+
+const documentLabel = (value: string) => value.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[_-]+/g, ' ');
 
 interface KycViewProps {
   user: CollectorUser;
@@ -28,7 +30,8 @@ export const KycView: React.FC<KycViewProps> = ({ user, onShowToast, onAutoCreat
   
   // Selected Applicant for Full Page Inspection & Review
   const [selectedApplicant, setSelectedApplicant] = useState<KycSubmission | null>(null);
-  const [activeDocIndex, setActiveDocIndex] = useState(0);
+  const [openingDocument, setOpeningDocument] = useState<string | null>(null);
+  const [documentError, setDocumentError] = useState('');
   const [reviewStatus, setReviewStatus] = useState<string>('');
   const [rejectionReason, setRejectionReason] = useState<string>('');
   const [submittingReview, setSubmittingReview] = useState(false);
@@ -58,6 +61,33 @@ export const KycView: React.FC<KycViewProps> = ({ user, onShowToast, onAutoCreat
   useEffect(() => {
     loadKyc();
   }, [loadKyc]);
+
+  const openDocument = async (doc: NonNullable<KycSubmission['documents']>[number], download: boolean) => {
+    if (!selectedApplicant || openingDocument) return;
+    const preview = download ? null : window.open('about:blank', '_blank');
+    if (preview) preview.opener = null;
+    setOpeningDocument(doc.id);
+    setDocumentError('');
+    try {
+      if (!download && !preview) throw new Error('Please allow pop-ups to view documents, or use Download.');
+      const blob = await fetchKycDocument(doc.fileUrl || '');
+      const url = URL.createObjectURL(blob);
+      if (download) {
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = doc.fileName || 'document';
+        link.click();
+      } else if (preview) {
+        preview.location.replace(url);
+      }
+      window.setTimeout(() => URL.revokeObjectURL(url), 300_000);
+    } catch (error) {
+      preview?.close();
+      setDocumentError(error instanceof Error ? error.message : 'Unable to open this document.');
+    } finally {
+      setOpeningDocument(null);
+    }
+  };
 
   // Handle Review Submission
   const handleReviewDecision = async (e: React.FormEvent) => {
@@ -115,7 +145,7 @@ export const KycView: React.FC<KycViewProps> = ({ user, onShowToast, onAutoCreat
   // Render full standalone inspection view if an applicant is selected (PAGE VIEW - NOT POPUP)
   if (selectedApplicant) {
     return (
-      <div className="max-w-4xl mx-auto space-y-6 pb-24 font-sans">
+      <div className="w-full min-w-0 max-w-4xl mx-auto space-y-6 pb-24 font-sans">
         {/* Top Header with Back Button */}
         <div className="bg-white p-6 border border-[#e5e5e5] shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
@@ -191,40 +221,32 @@ export const KycView: React.FC<KycViewProps> = ({ user, onShowToast, onAutoCreat
           </h4>
 
           {selectedApplicant.documents && selectedApplicant.documents.length > 0 ? (
-            <div className="space-y-4">
-              <div className="flex gap-2 border-b border-[#e5e5e5] pb-2">
+            <div className="min-w-0">
+              <p className="text-xs text-[#595959] mb-3">{selectedApplicant.documents.length} documents submitted</p>
+              {documentError && <p role="alert" className="mb-3 border border-red-200 bg-red-50 p-3 text-sm text-red-700 break-words">{documentError}</p>}
+              <ul className="divide-y divide-[#e5e5e5]">
                 {selectedApplicant.documents.map((doc, idx) => (
-                  <button
+                  <li
                     key={doc.id || idx}
-                    onClick={() => setActiveDocIndex(idx)}
-                    className={`px-4 py-2 text-xs font-bold uppercase tracking-wider border cursor-pointer ${
-                      activeDocIndex === idx
-                        ? 'bg-[#0891b2] text-white border-[#0891b2]'
-                        : 'bg-white text-[#595959] border-[#d6d6d6] hover:bg-[#f2f2f2]'
-                    }`}
+                    className="flex flex-col sm:flex-row sm:items-center gap-3 py-4 min-w-0"
                   >
-                    {doc.documentType || `Document #${idx + 1}`}
-                  </button>
+                    <FileText className="hidden sm:block w-5 h-5 shrink-0 text-[#0891b2]" />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-bold text-[#1a1c1c] break-words">{documentLabel(doc.documentType || `Document ${idx + 1}`)}</p>
+                      <p className="mt-1 text-xs text-[#595959] [overflow-wrap:anywhere]">{doc.fileName || 'Document file'}</p>
+                      {!doc.fileUrl && <p className="mt-1 text-xs text-red-700">File unavailable. A new upload is required.</p>}
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <button type="button" disabled={!doc.fileUrl || !!openingDocument} onClick={() => openDocument(doc, false)} className="inline-flex items-center justify-center gap-2 border border-[#d6d6d6] px-3 py-2 text-xs font-bold hover:bg-[#f2f2f2] disabled:opacity-50 cursor-pointer">
+                        {openingDocument === doc.id ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Eye className="w-4 h-4" />} View
+                      </button>
+                      <button type="button" title={`Download ${doc.fileName}`} aria-label={`Download ${doc.fileName}`} disabled={!doc.fileUrl || !!openingDocument} onClick={() => openDocument(doc, true)} className="flex items-center justify-center w-9 h-9 bg-[#2f3131] text-white hover:bg-black disabled:opacity-50 cursor-pointer">
+                        <Download className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </li>
                 ))}
-              </div>
-
-              <div className="p-6 bg-[#f9f9f9] border border-[#d6d6d6] text-center space-y-3">
-                <p className="text-sm font-bold text-[#1a1c1c]">{selectedApplicant.documents[activeDocIndex]?.fileName || 'Document File'}</p>
-                <p className="text-xs text-[#595959]">Type: {selectedApplicant.documents[activeDocIndex]?.documentType}</p>
-                {selectedApplicant.documents[activeDocIndex]?.fileUrl ? (
-                  <a
-                    href={selectedApplicant.documents[activeDocIndex]?.fileUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#2f3131] text-white text-xs font-bold uppercase tracking-wider hover:bg-black transition-colors"
-                  >
-                    <Download className="w-4 h-4" />
-                    <span>View / Download File</span>
-                  </a>
-                ) : (
-                  <p className="text-xs text-[#dc2626] font-bold">File metadata present but link is offline.</p>
-                )}
-              </div>
+              </ul>
             </div>
           ) : (
             <p className="text-xs text-[#595959] italic p-4 bg-[#f9f9f9] border border-[#d6d6d6]">
@@ -458,7 +480,7 @@ export const KycView: React.FC<KycViewProps> = ({ user, onShowToast, onAutoCreat
                       <button
                         onClick={() => {
                           setSelectedApplicant(item);
-                          setActiveDocIndex(0);
+                          setDocumentError('');
                           setReviewStatus(item.status || 'APPROVED');
                           setRejectionReason(item.rejectionReason || '');
                         }}

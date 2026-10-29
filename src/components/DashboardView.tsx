@@ -1130,11 +1130,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   return (
     <div className="max-w-7xl mx-auto flex flex-col gap-6 font-sans">
       {/* Header & Quick Action */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-6 rounded-2xl border border-slate-200 shadow-xs">
+      <div className="flex flex-col items-start justify-between gap-3 border-b border-slate-200 bg-slate-50 p-4 xl:flex-row xl:items-center">
         <div>
-          <div className="flex items-center gap-2 text-[10px] font-bold text-[#0891b2] uppercase tracking-widest">
+          <div className="flex flex-col gap-1 text-[10px] font-bold text-[#0891b2] uppercase sm:flex-row sm:flex-wrap sm:items-center sm:gap-2">
             <span>Executive Overview</span>
-            <span>/</span>
+            <span className="hidden sm:inline">/</span>
             <span>Daily Operations ({new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' })})</span>
           </div>
           <h2 className="text-2xl font-bold tracking-tight text-slate-900 mt-1">
@@ -1145,22 +1145,22 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5 w-full md:w-auto flex-wrap">
+        <div className="grid w-full min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 xl:flex xl:w-auto">
           {/* Download Daily PDF Report Button for CEO */}
           <button
             onClick={() => downloadDailyReportPDF(dailyCompanyCollections, user || INITIAL_USER, new Date())}
-            className="flex-1 md:flex-none h-11 px-5 bg-white border border-[#0891b2] text-[#0891b2] hover:bg-[#ecfeff] rounded-xl text-xs font-bold tracking-wider uppercase flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs"
+            className="min-h-11 w-full xl:w-auto py-3 px-5 bg-white shrink-0 border border-[#0891b2] text-[#0891b2] hover:bg-[#ecfeff] rounded-xl text-xs font-bold tracking-wider uppercase flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs"
             title="Download PDF report for today's daily transactions"
           >
-            <Download className="w-4 h-4 text-[#0891b2]" />
+            <Download className="w-4 h-4 shrink-0 text-[#0891b2]" />
             <span>Download Daily PDF</span>
           </button>
 
           <button
             onClick={() => onNavigate('new-collection')}
-            className="flex-1 md:flex-none h-11 px-6 bg-[#0891b2] hover:bg-[#0e7490] text-white rounded-xl text-xs font-bold tracking-wider uppercase flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs"
+            className="min-h-11 w-full xl:w-auto py-3 px-6 bg-[#0891b2] hover:bg-[#0e7490] text-white rounded-xl text-xs font-bold tracking-wider uppercase flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs shrink-0"
           >
-            <Plus className="w-4 h-4 stroke-[3]" />
+            <Plus className="w-4 h-4 shrink-0 stroke-[3]" />
             <span>Assign / Start Collection</span>
           </button>
         </div>
@@ -1193,7 +1193,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </button>
         </div>
 
-        <div className="flex items-center gap-2 text-xs">
+        <div className="flex min-w-0 flex-col items-start gap-2 text-xs xl:flex-row xl:items-center">
           <span className="text-slate-500">
             {timeframeMode === 'today'
               ? `Filtering strictly to today's activity (${dailyCompanyCollections.length} records)`
@@ -1328,25 +1328,25 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       </div>
 
       {/* CEO Company-wide Collections List (Strictly Today's Queue) */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-xs flex flex-col overflow-hidden">
-        <div className="p-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
-          <div className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-[#16a34a]" />
-            <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
-              Today's Collections & Live Operational Queue ({dailyCompanyCollections.length} records today)
+      <div className="min-w-0 bg-white border border-slate-200 flex flex-col">
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 border-b border-slate-200 px-4 py-4">
+          <div className="min-w-0">
+            <h3 className="text-base font-semibold text-slate-900">
+              Today's collections
             </h3>
+            <p className="mt-1 text-xs text-slate-500">{dailyCompanyCollections.length} {dailyCompanyCollections.length === 1 ? 'record' : 'records'} today</p>
           </div>
           <button
             onClick={() => onNavigate('history')}
-            className="text-[#0891b2] text-xs font-bold tracking-wider uppercase hover:underline flex items-center gap-1 cursor-pointer"
+            className="inline-flex min-h-11 shrink-0 items-center gap-1 whitespace-nowrap text-sm font-semibold text-[#0891b2] hover:underline cursor-pointer"
           >
-            <span>View Full Multi-Month History</span>
-            <ChevronRight className="w-4 h-4" />
+            <span>View history</span>
+            <ChevronRight className="w-4 h-4 shrink-0" />
           </button>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
+        <div className="min-w-0 overflow-x-auto" role="region" aria-label="Today's collections" tabIndex={0}>
+          <table className="w-full min-w-[640px] text-left border-collapse">
             <thead>
               <tr className="bg-slate-800 text-white text-[10px] font-bold uppercase tracking-wider">
                 <th className="p-3.5">ID / Time</th>

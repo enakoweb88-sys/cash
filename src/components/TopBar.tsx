@@ -41,7 +41,7 @@ export const TopBar: React.FC<TopBarProps> = ({
 
   return (
     <header className="w-full bg-[#ffffff] border-b border-[#e5e5e5] sticky top-0 z-30 shrink-0">
-      <div className="h-16 flex items-center justify-between px-3 sm:px-4 md:px-8">
+      <div className="h-16 flex items-center justify-between gap-2 px-3 sm:px-4 xl:px-8">
         {/* Left: Brand & Mobile Menu */}
         <div className="flex items-center gap-2 sm:gap-3 min-w-0">
           <button
@@ -58,14 +58,14 @@ export const TopBar: React.FC<TopBarProps> = ({
             className="flex items-center gap-2.5 cursor-pointer select-none min-w-0"
           >
             <img src="/logo.svg" alt="E-NAKO Logo" className="h-9 w-auto object-contain shrink-0" />
-            <span className="font-bold text-base sm:text-lg md:text-xl text-[#0891b2] uppercase tracking-tight truncate">
+            <span className="font-bold text-xl text-[#0891b2] uppercase truncate hidden lg:inline">
               E-NAKO
             </span>
           </div>
         </div>
 
         {/* Center: Navigation Tabs & Search (Desktop) */}
-        <div className="hidden lg:flex items-center gap-8 justify-center">
+        <div className="hidden 2xl:flex items-center gap-8 justify-center">
           <nav className="flex gap-6 items-center">
             <button
               onClick={() => onNavigate('dashboard')}
@@ -105,7 +105,7 @@ export const TopBar: React.FC<TopBarProps> = ({
           {/* Mobile search toggle */}
           <button
             onClick={() => setShowMobileSearch(!showMobileSearch)}
-            className="lg:hidden w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center text-[#4a4a4a] hover:bg-[#eeeeee] transition-colors"
+            className="2xl:hidden w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center text-[#4a4a4a] hover:bg-[#eeeeee] transition-colors"
             title="Search"
             aria-label="Toggle search"
           >
@@ -113,9 +113,9 @@ export const TopBar: React.FC<TopBarProps> = ({
           </button>
 
           {/* Online status indicator */}
-          <div className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-bold tracking-wider uppercase bg-[#ecfeff] text-[#0e7490] border border-[#a5f3fc]">
+          <div title="Online System" aria-label="Online System" className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-bold tracking-wider uppercase bg-[#ecfeff] text-[#0e7490] border border-[#a5f3fc]">
             <div className="w-2 h-2 rounded-full bg-[#0891b2]" />
-            <span>Online System</span>
+            <span className="hidden lg:inline">Online System</span>
           </div>
 
           {/* Settings Button */}
@@ -157,7 +157,7 @@ export const TopBar: React.FC<TopBarProps> = ({
 
       {/* Mobile Search Bar Expandable */}
       {showMobileSearch && (
-        <div className="lg:hidden px-3 py-2 bg-[#f3f3f3] border-t border-[#e5e5e5] flex items-center gap-2">
+        <div className="2xl:hidden px-3 py-2 bg-[#f3f3f3] border-t border-[#e5e5e5] flex items-center gap-2">
           <div className="relative flex-1">
             <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-[#4a4a4a]" />
             <input
