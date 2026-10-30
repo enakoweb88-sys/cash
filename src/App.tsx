@@ -43,6 +43,7 @@ import {
   authenticatePortalUser
 } from './api/cashApi';
 import { generateReceiptPdfBase64 } from './utils/exportUtils';
+import { beginCashSession, LAST_ACTIVITY_KEY, watchCashInactivity } from './utils/idleSession';
 import { CheckCircle2, AlertCircle, RefreshCw } from 'lucide-react';
 import {
   canConfigureSystem,
@@ -340,6 +341,7 @@ export default function App() {
         avatarLetter: 'E',
         isLoggedIn: true,
       };
+      beginCashSession();
       setUser(ceoUser);
       showToast('Welcome back, ENAKO CEO! Executive session active.', 'success');
       return { success: true };
@@ -424,6 +426,7 @@ export default function App() {
       isLoggedIn: true,
     };
 
+    beginCashSession();
     setUser(loggedInUser);
     const firstName = match.firstName || match.fullName.split(' ')[0];
     showToast(`Welcome back, ${firstName}! Terminal session active (${match.branch}).`, 'success');
@@ -480,6 +483,7 @@ export default function App() {
       isLoggedIn: true,
     };
 
+    beginCashSession();
     setUser(newUser);
     showToast(`Account created successfully! Welcome, ${userData.firstName.trim()}!`, 'success');
     return { success: true };
@@ -526,7 +530,7 @@ export default function App() {
   };
 
   // Logout handler
-  const handleLogout = () => {
+  const handleLogout = useCallback(() => {
     const loggedOutUser: CollectorUser = {
       ...INITIAL_USER,
       isLoggedIn: false,
@@ -537,14 +541,30 @@ export default function App() {
     localStorage.removeItem('enako_access_token');
     localStorage.removeItem('access_token');
     sessionStorage.removeItem('enako_access_token');
+    sessionStorage.removeItem('access_token');
+    localStorage.removeItem(LAST_ACTIVITY_KEY);
+    setActiveReceipt(null);
+    setStatusUpdateCollection(null);
+    setIsSettingsModalOpen(false);
+    setIsSupportModalOpen(false);
+    setIsProfileModalOpen(false);
+    setMobileMenuOpen(false);
     localStorage.removeItem('enako_cash_current_view');
     if (typeof window !== 'undefined') {
       window.location.hash = '';
       window.history.replaceState(null, '', window.location.pathname);
     }
     setCurrentView('dashboard');
-    showToast('Signed out of terminal successfully.', 'info');
-  };
+    setToastMessage({ text: 'Signed out of terminal successfully.', type: 'info' });
+  }, []);
+
+  useEffect(() => {
+    if (!user.isLoggedIn) return;
+    return watchCashInactivity(() => {
+      handleLogout();
+      setToastMessage({ text: 'Signed out after 2 minutes of inactivity. Please sign in again.', type: 'info' });
+    });
+  }, [user.isLoggedIn, handleLogout]);
 
   // Save new collection and submit directly to central backend API
   const handleSaveCollection = (data: Omit<Collection, 'id'>) => {

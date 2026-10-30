@@ -14,6 +14,7 @@ export interface ExchangeRateItem {
   sellingRate: string;
   change24h: number;
   lastUpdated?: string;
+  quoteBasis?: 'NGN_PER_1000_XAF';
 }
 
 export interface Client {

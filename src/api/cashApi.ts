@@ -275,7 +275,10 @@ export async function fetchRemoteTransactions(params?: {
   const remoteIds = new Set(remoteItems.map((r: any) => r.id));
   const newFromLocal = localItems.filter((l: any) => !remoteIds.has(l.id));
 
-  let combined = [...remoteItems, ...newFromLocal];
+  let combined = [
+    ...remoteItems.map((remote: any) => ({ ...localItems.find((local: any) => local.id === remote.id), ...remote })),
+    ...newFromLocal,
+  ];
 
   // If remote returns empty, supply exact real PostgreSQL database transactions
   if (combined.length === 0) {
@@ -284,6 +287,11 @@ export async function fetchRemoteTransactions(params?: {
 
   // Map database item properties cleanly
   const mapped = combined.map((item: any) => {
+    // The database rate has four decimal places. For NGN, recover the effective
+    // rate from the saved monetary amounts instead of inverting that rounded rate.
+    const appliedRate = item.currency === 'NGN' && Number(item.amount) > 0 && Number(item.amountInXaf) > 0
+      ? Number(item.amountInXaf) / Number(item.amount)
+      : Number(item.exchangeRate || item.buyingRate || 1);
     return {
       id: String(item.id || item.reference || `FX-${Math.floor(Math.random() * 10000)}`),
       entity: item.entity || 'Client Entity',
@@ -292,9 +300,9 @@ export async function fetchRemoteTransactions(params?: {
       currency: item.currency || 'XAF',
       amount: Number(item.amount || 0),
       amountInXaf: Number(item.amountInXaf || item.amount || 0),
-      exchangeRate: Number(item.exchangeRate || item.buyingRate || 1),
-      buyingRate: Number(item.buyingRate || item.exchangeRate || 1),
-      sellingRate: Number(item.sellingRate || item.exchangeRate || 1),
+      exchangeRate: appliedRate,
+      buyingRate: Number(item.buyingRate || appliedRate),
+      sellingRate: Number(item.sellingRate || appliedRate),
       status: (item.status || 'SETTLED').toUpperCase(),
       description: item.description || item.reference || '',
       createdAt: item.createdAt || new Date().toISOString(),
@@ -328,19 +336,19 @@ export async function createRemoteTransaction(payload: any): Promise<boolean> {
     createdAt: payload.createdAt || new Date().toISOString(),
   };
 
-  // Always save to local database cache
-  saveLocalTransaction(newTx);
-
   try {
     const res = await fetch(`${API_BASE_URL}/transactions`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
       body: JSON.stringify(newTx),
     });
-    return res.ok || true; // succeed locally if backend returns 200/201 or in dev
+    if (!res.ok) return false;
+    const saved = await res.json();
+    saveLocalTransaction({ ...newTx, ...saved });
+    return true;
   } catch (error) {
     console.warn('Remote transaction creation note:', error);
-    return true; // saved locally
+    return false;
   }
 }
 
@@ -426,10 +434,10 @@ export async function fetchKycDocument(fileUrl: string): Promise<Blob> {
   try {
     response = await fetch(url.href);
   } catch {
-    throw new Error('Cannot reach document storage. Check your connection and that the Supabase project is running.');
+    throw new Error('Unable to load this document. Check your connection and try again.');
   }
   if (!response.ok) {
-    throw new Error(`Unable to retrieve this document (HTTP ${response.status}). Check that the file exists and its storage access is configured correctly.`);
+    throw new Error('This document is unavailable. Please retry or contact an administrator.');
   }
   return response.blob();
 }

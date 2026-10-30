@@ -9,10 +9,12 @@ import {
   FileText, 
   Eye, 
   Download,
-  ArrowLeft
+  ArrowLeft,
+  X
 } from 'lucide-react';
 import { KycSubmission, CollectorUser } from '../types';
 import { fetchRemoteKycSubmissions, reviewRemoteKycSubmission, sendKycDecisionNotificationEmail, fetchKycDocument } from '../api/cashApi';
+import { prepareDocumentPreview } from '../utils/documentPreview';
 
 const documentLabel = (value: string) => value.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[_-]+/g, ' ');
 
@@ -32,6 +34,18 @@ export const KycView: React.FC<KycViewProps> = ({ user, onShowToast, onAutoCreat
   const [selectedApplicant, setSelectedApplicant] = useState<KycSubmission | null>(null);
   const [openingDocument, setOpeningDocument] = useState<string | null>(null);
   const [documentError, setDocumentError] = useState('');
+  const [documentPreview, setDocumentPreview] = useState<{ url: string; name: string; type: string } | null>(null);
+  useEffect(() => {
+    if (!documentPreview) return;
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setDocumentPreview(null);
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => {
+      window.removeEventListener('keydown', handleKey);
+      URL.revokeObjectURL(documentPreview.url);
+    };
+  }, [documentPreview]);
   const [reviewStatus, setReviewStatus] = useState<string>('');
   const [rejectionReason, setRejectionReason] = useState<string>('');
   const [submittingReview, setSubmittingReview] = useState(false);
@@ -64,25 +78,22 @@ export const KycView: React.FC<KycViewProps> = ({ user, onShowToast, onAutoCreat
 
   const openDocument = async (doc: NonNullable<KycSubmission['documents']>[number], download: boolean) => {
     if (!selectedApplicant || openingDocument) return;
-    const preview = download ? null : window.open('about:blank', '_blank');
-    if (preview) preview.opener = null;
     setOpeningDocument(doc.id);
     setDocumentError('');
     try {
-      if (!download && !preview) throw new Error('Please allow pop-ups to view documents, or use Download.');
-      const blob = await fetchKycDocument(doc.fileUrl || '');
+      const storedBlob = await fetchKycDocument(doc.fileUrl || '');
+      const blob = download ? storedBlob : await prepareDocumentPreview(storedBlob);
       const url = URL.createObjectURL(blob);
       if (download) {
         const link = document.createElement('a');
         link.href = url;
         link.download = doc.fileName || 'document';
         link.click();
-      } else if (preview) {
-        preview.location.replace(url);
+        window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      } else {
+        setDocumentPreview({ url, name: doc.fileName || 'Document', type: blob.type });
       }
-      window.setTimeout(() => URL.revokeObjectURL(url), 300_000);
     } catch (error) {
-      preview?.close();
       setDocumentError(error instanceof Error ? error.message : 'Unable to open this document.');
     } finally {
       setOpeningDocument(null);
@@ -146,6 +157,31 @@ export const KycView: React.FC<KycViewProps> = ({ user, onShowToast, onAutoCreat
   if (selectedApplicant) {
     return (
       <div className="w-full min-w-0 max-w-4xl mx-auto space-y-6 pb-24 font-sans">
+        {documentPreview && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-3 sm:p-6" onClick={() => setDocumentPreview(null)}>
+            <section role="dialog" aria-modal="true" aria-label={documentPreview.name} className="flex h-[85vh] w-full max-w-5xl flex-col bg-white shadow-xl" onClick={event => event.stopPropagation()}>
+              <div className="flex items-center gap-3 border-b border-[#e5e5e5] p-4">
+                <FileText className="h-5 w-5 shrink-0 text-[#0891b2]" />
+                <h3 className="min-w-0 flex-1 break-words text-sm font-bold">{documentPreview.name}</h3>
+                <a href={documentPreview.url} download={documentPreview.name} aria-label="Download document" className="p-2"><Download className="h-5 w-5" /></a>
+                <button type="button" autoFocus onClick={() => setDocumentPreview(null)} aria-label="Close document" className="p-2"><X className="h-5 w-5" /></button>
+              </div>
+              <div className="min-h-0 flex-1 overflow-auto bg-[#f2f2f2] p-3">
+                {documentPreview.type.startsWith('image/') ? (
+                  <img src={documentPreview.url} alt={documentPreview.name} className="mx-auto h-full max-w-full object-contain" />
+                ) : documentPreview.type === 'application/pdf' ? (
+                  // Chrome's native PDF viewer cannot run in a sandboxed frame.
+                  // Only a validated PDF blob reaches this frame.
+                  <iframe title={documentPreview.name} src={documentPreview.url} className="h-full w-full border-0" />
+                ) : documentPreview.type === 'text/plain' ? (
+                  <iframe title={documentPreview.name} src={documentPreview.url} sandbox="" className="h-full w-full border-0" />
+                ) : (
+                  <p className="p-6 text-center text-sm">Preview unavailable for this file type. Use Download to open it.</p>
+                )}
+              </div>
+            </section>
+          </div>
+        )}
         {/* Top Header with Back Button */}
         <div className="bg-white p-6 border border-[#e5e5e5] shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>

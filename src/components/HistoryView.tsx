@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { Collection, TransactionStatus, CollectorUser, Client } from '../types';
 import { formatXAF, INITIAL_USER } from '../data/mockData';
+import { canViewCollection } from '../utils/permissions';
 import {
   downloadReportPDF,
   downloadReportExcel,
@@ -78,6 +79,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
   const filteredHistory = useMemo(() => {
     return collections
       .filter((col) => {
+        if (!canViewCollection(user, col)) return false;
         // Status filter
         if (statusFilter !== 'ALL' && col.status !== statusFilter) return false;
 
@@ -119,7 +121,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
           ? new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
           : new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
       });
-  }, [collections, searchQuery, statusFilter, sortBy, sortOrder, timeframeMode, selectedDay, selectedMonth, selectedYear]);
+  }, [collections, user, searchQuery, statusFilter, sortBy, sortOrder, timeframeMode, selectedDay, selectedMonth, selectedYear]);
 
   // Aggregated totals for the active filtered selection
   const totalFilteredCollected = useMemo(() => {

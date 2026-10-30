@@ -17,7 +17,7 @@ export const INITIAL_CURRENCIES: Record<string, ExchangeRateItem> = {
   EUR: { code: 'EUR', name: 'Euro', flag: '💶', buyingRate: '655', sellingRate: '665', change24h: 0.3 },
   GBP: { code: 'GBP', name: 'British Pound', flag: '🇬🇧', buyingRate: '780', sellingRate: '795', change24h: -0.2 },
   USDT: { code: 'USDT', name: 'Tether Crypto Dollar', flag: '🪙', buyingRate: '630', sellingRate: '645', change24h: 1.2 },
-  NGN: { code: 'NGN', name: 'Nigerian Naira', flag: '🇳🇬', buyingRate: '400', sellingRate: '420', change24h: -0.5 },
+  NGN: { code: 'NGN', name: 'Nigerian Naira', flag: '🇳🇬', buyingRate: '2500', sellingRate: String(1000000 / 420), change24h: -0.5, quoteBasis: 'NGN_PER_1000_XAF' },
   CNY: { code: 'CNY', name: 'Chinese Yuan', flag: '🇨🇳', buyingRate: '85', sellingRate: '90', change24h: 0.1 },
 };
 
@@ -26,6 +26,17 @@ export function getStoredRates(): Record<string, ExchangeRateItem> {
     const raw = localStorage.getItem('enako_cash_exchange_rates');
     if (raw) {
       const parsed = JSON.parse(raw);
+      // Legacy settings quoted XAF per 1,000 NGN. Preserve their value while
+      // converting the quotation direction, once, using the basis marker.
+      if (parsed.NGN && parsed.NGN.quoteBasis !== 'NGN_PER_1000_XAF') {
+        const legacy = parsed.NGN;
+        parsed.NGN = {
+          ...legacy,
+          buyingRate: Number(legacy.buyingRate) > 0 ? String(1000000 / Number(legacy.buyingRate)) : '',
+          sellingRate: Number(legacy.sellingRate) > 0 ? String(1000000 / Number(legacy.sellingRate)) : '',
+          quoteBasis: 'NGN_PER_1000_XAF',
+        };
+      }
       return { ...INITIAL_CURRENCIES, ...parsed };
     }
   } catch (e) {}
@@ -84,6 +95,10 @@ export const ExchangeRatesView: React.FC<ExchangeRatesViewProps> = ({
       onShowToast('Senior Cash Officers can view rates but cannot change them.', 'info');
       return;
     }
+    if (Object.values(editForm).some((rate: { buyingRate: string; sellingRate: string }) => !Number.isFinite(Number(rate.buyingRate)) || Number(rate.buyingRate) <= 0 || !Number.isFinite(Number(rate.sellingRate)) || Number(rate.sellingRate) <= 0)) {
+      onShowToast('Enter buying and selling rates greater than zero for every currency.', 'error');
+      return;
+    }
     setSaving(true);
     setTimeout(() => {
       const updated: Record<string, ExchangeRateItem> = { ...rates };
@@ -124,7 +139,7 @@ export const ExchangeRatesView: React.FC<ExchangeRatesViewProps> = ({
             Exchange rates
           </h2>
           <p className="text-xs text-[#595959] mt-0.5">
-            Buying and selling rates in FCFA. NGN is quoted per 1,000 NGN.
+            NGN rates are naira per 1,000 XAF (e.g. 2,300 NGN = 1,000 XAF). Other rates are XAF per currency unit.
           </p>
         </div>
 
@@ -149,7 +164,7 @@ export const ExchangeRatesView: React.FC<ExchangeRatesViewProps> = ({
         )}
         <div className="overflow-x-auto border border-[#e5e5e5] bg-white" role="region" aria-label="Exchange rates" tabIndex={0}>
           <table className="w-full table-fixed min-w-[280px] text-left text-sm">
-            <caption className="sr-only">Exchange rates in FCFA; NGN rates are per 1,000 NGN.</caption>
+            <caption className="sr-only">NGN per 1,000 XAF; other currencies in XAF per unit.</caption>
             <thead className="border-b border-[#e5e5e5] bg-[#f3f3f3] text-xs text-[#595959]">
               <tr>
                 <th scope="col" className="w-[30%] px-2 sm:px-4 py-3 font-semibold">Currency</th>
@@ -162,7 +177,7 @@ export const ExchangeRatesView: React.FC<ExchangeRatesViewProps> = ({
           {rateList.map((curr) => {
             const buying = Number(editForm[curr.code]?.buyingRate || 0);
             const selling = Number(editForm[curr.code]?.sellingRate || 0);
-            const spread = selling > buying && buying > 0 ? (selling - buying).toFixed(curr.code === 'NGN' ? 3 : 2) : null;
+            const spread = buying > 0 && selling > 0 ? (curr.code === 'NGN' ? 1000 / selling - 1000 / buying : selling - buying).toFixed(curr.code === 'NGN' ? 4 : 2) : null;
             const isPositive = curr.change24h >= 0;
 
             return (
@@ -174,7 +189,7 @@ export const ExchangeRatesView: React.FC<ExchangeRatesViewProps> = ({
                 <th scope="row" className="px-2 sm:px-4 py-3 font-normal">
                   <span className="block text-sm font-semibold text-[#1a1c1c]">{curr.code}</span>
                   <span className="hidden sm:block mt-1 text-xs text-[#595959] break-words">{curr.name}</span>
-                  {curr.code === 'NGN' && <span className="block mt-1 text-[10px] text-[#595959]">per 1,000</span>}
+                  <span className="block mt-1 text-[10px] text-[#595959]">{curr.code === 'NGN' ? 'NGN / 1,000 XAF' : 'XAF / unit'}</span>
                 </th>
 
                 {/* Input Fields */}
@@ -182,7 +197,7 @@ export const ExchangeRatesView: React.FC<ExchangeRatesViewProps> = ({
                     <input
                       type="text"
                       inputMode="decimal"
-                      aria-label={`${curr.code} buying rate in FCFA${curr.code === 'NGN' ? ' per 1,000 NGN' : ''}`}
+                      aria-label={curr.code === 'NGN' ? 'Buying rate in NGN per 1,000 XAF' : `${curr.code} buying rate in XAF per unit`}
                       disabled={!canEditRates}
                       value={editForm[curr.code]?.buyingRate || ''}
                       onChange={(e) =>
@@ -199,7 +214,7 @@ export const ExchangeRatesView: React.FC<ExchangeRatesViewProps> = ({
                     <input
                       type="text"
                       inputMode="decimal"
-                      aria-label={`${curr.code} selling rate in FCFA${curr.code === 'NGN' ? ' per 1,000 NGN' : ''}`}
+                      aria-label={curr.code === 'NGN' ? 'Selling rate in NGN per 1,000 XAF' : `${curr.code} selling rate in XAF per unit`}
                       disabled={!canEditRates}
                       value={editForm[curr.code]?.sellingRate || ''}
                       onChange={(e) =>
@@ -215,7 +230,7 @@ export const ExchangeRatesView: React.FC<ExchangeRatesViewProps> = ({
                 {/* Spread Margin Preview */}
                 <td className="px-2 sm:px-4 py-3 text-right">
                   <p className="text-xs font-semibold text-[#1a1c1c] tabular-nums [overflow-wrap:anywhere]">
-                    {spread !== null ? `+${spread}` : '-'}
+                    {spread !== null ? `${Number(spread) >= 0 ? '+' : ''}${spread} XAF/unit` : '-'}
                   </p>
                   <span className={`inline-flex items-center gap-0.5 text-[9px] font-bold mt-1 ${isPositive ? 'text-[#16a34a]' : 'text-[#dc2626]'}`}>
                     {isPositive ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}

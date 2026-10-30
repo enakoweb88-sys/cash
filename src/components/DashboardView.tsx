@@ -30,7 +30,7 @@ import {
 import { Collection, ViewType, CollectorUser } from '../types';
 import { formatXAF, INITIAL_USER } from '../data/mockData';
 import { downloadReceiptPDF, downloadDailyReportPDF } from '../utils/exportUtils';
-import { hasOperationalAccess, isSeniorCollector } from '../utils/permissions';
+import { hasOperationalAccess, isSeniorCollector, canViewCollection } from '../utils/permissions';
 
 interface DashboardViewProps {
   collections: Collection[];
@@ -95,15 +95,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   };
 
   // Filter collections for current user if field collector
-  const collectorCollections = collections.filter((c) => {
-    if (isCeoOrManager) return true;
-    if (!user) return true;
-    return (
-      c.assignedCollectorId === user.terminalId ||
-      c.assignedCollectorId === user.id ||
-      (c.assignedCollectorName && c.assignedCollectorName.toLowerCase().includes(firstName.toLowerCase()))
-    );
-  });
+  const collectorCollections = collections.filter((c) => canViewCollection(user, c));
 
   // DAILY TRANSACTIONS ONLY vs ALL ACTIVE TOGGLE
   // Today is always the default. Historical records appear only after the user selects All.
@@ -231,7 +223,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 className="flex-1 sm:flex-none px-5 py-2.5 bg-[#0891b2] hover:bg-[#0e7490] text-white text-xs font-bold tracking-wider uppercase flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs"
               >
                 <Check className="w-4 h-4 stroke-[3]" />
-                <span>Complete Collection</span>
+                <span>{onOpenStatusUpdate ? 'Complete Collection' : 'View Receipt'}</span>
               </button>
             )}
           </div>
@@ -391,7 +383,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       }}
                       className="w-full sm:w-auto px-4 py-2 bg-[#ba1a1a] hover:bg-[#93000a] text-white text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-xs"
                     >
-                      <span>Update Received Cash</span>
+                      <span>{onOpenStatusUpdate ? 'Update Received Cash' : 'View Receipt'}</span>
                     </button>
 
                     <div className="px-4 py-2 bg-[#ecfeff] border border-[#a5f3fc] text-right w-full sm:w-auto">
@@ -912,7 +904,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                           className="px-3.5 py-2 rounded-xl bg-[#0891b2] hover:bg-[#0e7490] text-white text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shadow-xs transition-colors"
                         >
                           <Check className="w-3.5 h-3.5 stroke-[3]" />
-                          <span>Complete Job</span>
+                          <span>{onOpenStatusUpdate ? 'Complete Job' : 'View Receipt'}</span>
                         </button>
                       </div>
                     </div>
@@ -1112,7 +1104,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                           className="px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shadow-xs transition-colors"
                         >
                           <Check className="w-3.5 h-3.5 stroke-[3]" />
-                          <span>Update Amount</span>
+                          <span>{onOpenStatusUpdate ? 'Update Amount' : 'View Receipt'}</span>
                         </button>
                       </div>
                     </div>

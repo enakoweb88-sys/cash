@@ -1,4 +1,4 @@
-import { CollectorUser } from '../types';
+import { CollectorUser, Collection } from '../types';
 
 const normalizedRole = (user?: CollectorUser) => (user?.role || '').trim().toLowerCase();
 
@@ -20,3 +20,14 @@ export const canEditExistingRecords = (user?: CollectorUser) => isCeoUser(user);
 
 export const normalizeCollectorRole = (role?: string) =>
   isSeniorCollector({ role } as CollectorUser) ? 'Senior Cash Officer' : 'Field Cash Collector';
+
+export function canViewCollection(user: CollectorUser | undefined, collection: Collection): boolean {
+  if (!user) return false;
+  if (hasOperationalAccess(user)) return true;
+  if (collection.assignedCollectorId) {
+    return [user.id, user.terminalId].filter(Boolean).includes(collection.assignedCollectorId);
+  }
+  // Legacy records may only contain the collector's full name.
+  const name = user.name?.trim().toLowerCase();
+  return Boolean(name && collection.assignedCollectorName?.trim().toLowerCase() === name);
+}

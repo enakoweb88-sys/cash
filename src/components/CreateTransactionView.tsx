@@ -13,6 +13,8 @@ import {
 } from 'lucide-react';
 import { ViewType, CollectorUser } from '../types';
 import { createRemoteTransaction } from '../api/cashApi';
+import { getStoredRates } from './ExchangeRatesView';
+import { rateInXaf, formatExchangeRate } from '../utils/exchangeRates';
 
 interface CreateTransactionViewProps {
   user: CollectorUser;
@@ -41,8 +43,8 @@ export const CreateTransactionView: React.FC<CreateTransactionViewProps> = ({
   const [channel, setChannel] = useState('Bank Transfer');
   const [currency, setCurrency] = useState('USD');
   const [amount, setAmount] = useState('');
-  const [buyingRate, setBuyingRate] = useState('615');
-  const [sellingRate, setSellingRate] = useState('625');
+  const [buyingRate, setBuyingRate] = useState(() => getStoredRates().USD.buyingRate);
+  const [sellingRate, setSellingRate] = useState(() => getStoredRates().USD.sellingRate);
   const [sellingCurrency, setSellingCurrency] = useState('XAF');
   const [description, setDescription] = useState('');
 
@@ -58,12 +60,14 @@ export const CreateTransactionView: React.FC<CreateTransactionViewProps> = ({
 
   // Calculations
   const numAmount = Number(amount) || 0;
-  const numBuyingRate = Number(buyingRate) || 1;
-  const numSellingRate = Number(sellingRate) || 1;
+  const numBuyingRate = rateInXaf(currency, Number(buyingRate));
+  const numSellingRate = rateInXaf(currency, Number(sellingRate));
 
-  const amountInXaf = currency === 'XAF' ? numAmount : numAmount * numBuyingRate;
-  const sellingXaf = currency === 'XAF' ? numAmount : numAmount * numSellingRate;
+  const amountInXaf = Math.round(numAmount * numBuyingRate * 100) / 100;
+  const sellingXaf = Math.round(numAmount * numSellingRate * 100) / 100;
   const estimatedMargin = Math.max(0, sellingXaf - amountInXaf);
+  const appliedRate = type === 'Receive' ? numBuyingRate : numSellingRate;
+  const appliedAmount = type === 'Receive' ? amountInXaf : sellingXaf;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -73,8 +77,12 @@ export const CreateTransactionView: React.FC<CreateTransactionViewProps> = ({
       setErrorMessage('Please enter the client / entity name.');
       return;
     }
-    if (numAmount <= 0) {
+    if (!Number.isFinite(numAmount) || numAmount <= 0) {
       setErrorMessage('Please enter a valid transfer amount.');
+      return;
+    }
+    if (numBuyingRate <= 0 || numSellingRate <= 0) {
+      setErrorMessage('Enter valid buying and selling rates greater than zero.');
       return;
     }
 
@@ -87,16 +95,16 @@ export const CreateTransactionView: React.FC<CreateTransactionViewProps> = ({
         channel,
         amount: numAmount,
         currency,
-        amountInXaf,
-        exchangeRate: type === 'Receive' ? numBuyingRate : numSellingRate,
+        amountInXaf: appliedAmount,
+        exchangeRate: appliedRate,
         buyingRate: numBuyingRate,
         sellingRate: numSellingRate,
         transactionDate,
         transactionTime,
         createdAt: createdIso,
         description: description.trim() 
-          ? `${description.trim()} | Buy: ${numBuyingRate}, Sell: ${numSellingRate}`
-          : `FX ${type}: ${numAmount} ${currency} @ ${numBuyingRate} XAF`,
+          ? `${description.trim()} | ${formatExchangeRate(currency, appliedRate)}`
+          : `FX ${type}: ${numAmount} ${currency} | ${formatExchangeRate(currency, appliedRate)}`,
         status: 'PENDING',
       };
 
@@ -273,7 +281,13 @@ export const CreateTransactionView: React.FC<CreateTransactionViewProps> = ({
               </label>
               <select
                 value={currency}
-                onChange={(e) => setCurrency(e.target.value)}
+                onChange={(e) => {
+                  const code = e.target.value;
+                  const rates = getStoredRates()[code];
+                  setCurrency(code);
+                  setBuyingRate(code === 'XAF' ? '1' : rates?.buyingRate || '');
+                  setSellingRate(code === 'XAF' ? '1' : rates?.sellingRate || '');
+                }}
                 className="w-full h-12 px-4 bg-[#f9f9f9] border border-[#d6d6d6] focus:border-[#0891b2] focus:ring-1 focus:ring-[#0891b2] text-sm font-bold text-[#1a1c1c] outline-none cursor-pointer"
               >
                 <option value="USD">USD ($ - US Dollar)</option>
@@ -294,6 +308,8 @@ export const CreateTransactionView: React.FC<CreateTransactionViewProps> = ({
                 type="number"
                 required
                 value={amount}
+                min="0.01"
+                step="any"
                 onChange={(e) => setAmount(e.target.value)}
                 placeholder="e.g. 5000"
                 className="w-full h-12 px-4 bg-[#f9f9f9] border border-[#d6d6d6] focus:border-[#0891b2] focus:ring-1 focus:ring-[#0891b2] font-mono text-lg font-bold text-[#1a1c1c] outline-none"
@@ -304,11 +320,15 @@ export const CreateTransactionView: React.FC<CreateTransactionViewProps> = ({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
             <div>
               <label className="block text-xs font-bold uppercase tracking-wider text-[#595959] mb-1">
-                Buying Rate (1 {currency} = XAF)
+                {currency === 'NGN' ? 'Buying Rate (NGN per 1,000 XAF)' : `Buying Rate (XAF per 1 ${currency})`}
               </label>
               <input
                 type="number"
                 value={buyingRate}
+                min="0.000001"
+                step="any"
+                required
+                disabled={currency === 'XAF'}
                 onChange={(e) => setBuyingRate(e.target.value)}
                 placeholder="615"
                 className="w-full h-12 px-4 bg-[#f9f9f9] border border-[#d6d6d6] focus:border-[#0891b2] font-mono text-sm font-bold text-[#1a1c1c] outline-none"
@@ -317,11 +337,15 @@ export const CreateTransactionView: React.FC<CreateTransactionViewProps> = ({
 
             <div>
               <label className="block text-xs font-bold uppercase tracking-wider text-[#595959] mb-1">
-                Selling Rate (1 {currency} = XAF)
+                {currency === 'NGN' ? 'Selling Rate (NGN per 1,000 XAF)' : `Selling Rate (XAF per 1 ${currency})`}
               </label>
               <input
                 type="number"
                 value={sellingRate}
+                min="0.000001"
+                step="any"
+                required
+                disabled={currency === 'XAF'}
                 onChange={(e) => setSellingRate(e.target.value)}
                 placeholder="625"
                 className="w-full h-12 px-4 bg-[#f9f9f9] border border-[#d6d6d6] focus:border-[#0891b2] font-mono text-sm font-bold text-[#1a1c1c] outline-none"
@@ -329,12 +353,14 @@ export const CreateTransactionView: React.FC<CreateTransactionViewProps> = ({
             </div>
           </div>
 
+          {currency === 'NGN' && <p className="text-xs text-[#595959]">Example: a rate of 2,300 means 2,300 NGN = 1,000 XAF. XAF equivalent = NGN amount ÷ rate × 1,000.</p>}
           {/* Automatic Calculation Summary Box */}
           <div className="p-4 bg-[#2f3131] text-white border border-[#474746] space-y-2 mt-4">
             <div className="flex justify-between items-center text-xs font-bold uppercase tracking-wider text-[#22d3ee]">
               <span>Calculated XAF Equivalent</span>
               <Calculator className="w-4 h-4" />
             </div>
+            <p className="text-sm font-bold">{type === 'Receive' ? 'Receive' : 'Send'}: {appliedAmount.toLocaleString()} XAF</p>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
               <div>
                 <p className="text-[10px] text-[#c8c6c5] uppercase">Buying Cost (Inflow)</p>

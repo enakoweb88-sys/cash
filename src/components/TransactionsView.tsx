@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { FxTransaction, CollectorUser, ViewType } from '../types';
 import { fetchRemoteTransactions, settleRemoteTransaction } from '../api/cashApi';
+import { formatExchangeRate } from '../utils/exchangeRates';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
@@ -206,7 +207,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ user, onNavi
 
       const rateDisplay = tx.currency === 'XAF'
         ? '1.00 XAF'
-        : `${Number(tx.exchangeRate || tx.buyingRate || 1).toLocaleString()} XAF`;
+        : formatExchangeRate(tx.currency, Number(tx.exchangeRate || tx.buyingRate || 1));
 
       return [
         `${dateStr}\n${timeStr}`,
@@ -221,7 +222,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ user, onNavi
 
     autoTable(doc, {
       startY: 45,
-      head: [['Date & Time', 'Entity / Client', 'Type / Channel', 'FX Amount', 'Rate (FCFA)', 'Total XAF', 'Status']],
+      head: [['Date & Time', 'Entity / Client', 'Type / Channel', 'FX Amount', 'Exchange Rate', 'Total XAF', 'Status']],
       body: tableData.length > 0 ? tableData : [['No transactions found for this period', '', '', '', '', '', '']],
       theme: 'grid',
       headStyles: {
@@ -274,8 +275,8 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ user, onNavi
         tx.channel || 'Bank Transfer',
         tx.currency || 'XAF',
         Number(tx.amount || 0),
-        Number(tx.buyingRate || tx.exchangeRate || 1),
-        Number(tx.sellingRate || tx.exchangeRate || 1),
+        formatExchangeRate(tx.currency, Number(tx.buyingRate || tx.exchangeRate || 1)),
+        formatExchangeRate(tx.currency, Number(tx.sellingRate || tx.exchangeRate || 1)),
         Number(tx.amountInXaf || tx.amount || 0),
         tx.status || 'SETTLED',
         tx.description || '',
@@ -710,7 +711,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ user, onNavi
                 <div className="p-3 bg-[#f9f9f9] border border-[#e5e5e5]">
                   <p className="text-[9px] font-bold text-[#595959] uppercase">Applied Exchange Rate</p>
                   <p className="font-mono font-bold text-[#1a1c1c] mt-0.5">
-                    {selectedTxForDetail.exchangeRate || selectedTxForDetail.buyingRate || 1} XAF / {selectedTxForDetail.currency || 'USD'}
+                    {formatExchangeRate(selectedTxForDetail.currency, selectedTxForDetail.exchangeRate || selectedTxForDetail.buyingRate || 1)}
                   </p>
                 </div>
               </div>
