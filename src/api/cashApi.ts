@@ -10,12 +10,19 @@ const API_BASE_URL = getApiBaseUrl();
 
 export async function fetchRemoteCollections(): Promise<Collection[]> {
   try {
-    const res = await fetch(`${API_BASE_URL}/cash-collections?limit=100`, {
-      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-    });
-    if (!res.ok) throw new Error('Failed to fetch from backend');
-    const data = await res.json();
-    const items = data.items || [];
+    const items: any[] = [];
+    let page = 1;
+    while (true) {
+      const res = await fetch(`${API_BASE_URL}/cash-collections?limit=100&page=${page}`, {
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() }, cache: 'no-store',
+      });
+      if (!res.ok) throw new Error('Failed to fetch collections from backend');
+      const data = await res.json();
+      if (!Array.isArray(data.items)) throw new Error('Invalid collection response');
+      items.push(...data.items);
+      if (!data.totalPages || page >= Number(data.totalPages)) break;
+      page++;
+    }
 
     return items.map((item: any) => {
       let descParsed: any = {};
@@ -59,7 +66,7 @@ export async function fetchRemoteCollections(): Promise<Collection[]> {
     });
   } catch (error) {
     console.warn('Backend API fetch notice:', error);
-    return [];
+    throw error;
   }
 }
 
@@ -249,6 +256,7 @@ export async function fetchRemoteTransactions(params?: {
   channel?: string;
 }): Promise<any> {
   let remoteItems: any[] = [];
+  let remoteSucceeded = false;
   try {
     const q = new URLSearchParams();
     if (params?.search) q.append('search', params.search);
@@ -265,6 +273,7 @@ export async function fetchRemoteTransactions(params?: {
     if (res.ok) {
       const data = await res.json();
       remoteItems = data.items || (Array.isArray(data) ? data : []);
+      remoteSucceeded = true;
     }
   } catch (error) {
     console.warn('Remote transactions fetch notice:', error);
@@ -273,7 +282,7 @@ export async function fetchRemoteTransactions(params?: {
   // Merge remote data with local cache
   const localItems = getLocalTransactions();
   const remoteIds = new Set(remoteItems.map((r: any) => r.id));
-  const newFromLocal = localItems.filter((l: any) => !remoteIds.has(l.id));
+  const newFromLocal = remoteSucceeded ? [] : localItems.filter((l: any) => !remoteIds.has(l.id));
 
   let combined = [
     ...remoteItems.map((remote: any) => ({ ...localItems.find((local: any) => local.id === remote.id), ...remote })),

@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { reconcileCollections } from './utils/collectionSync';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   INITIAL_USER, 
   DEFAULT_ACCOUNTS,
@@ -158,6 +159,10 @@ export default function App() {
   // Collections (Settled / Server synced from Backend API)
   const [collections, setCollections] = useState<Collection[]>(() => {
     const saved = localStorage.getItem('enako_collections');
+    if (saved && !localStorage.getItem('enako_collections_backup_before_sync_v1')) {
+      try { localStorage.setItem('enako_collections_backup_before_sync_v1', saved); }
+      catch (error) { console.warn('Legacy cache backup could not be saved.', error); }
+    }
     return saved ? JSON.parse(saved) : [];
   });
 
@@ -189,18 +194,26 @@ export default function App() {
   // Global search
   const [globalSearch, setGlobalSearch] = useState('');
 
-  // Fetch remote collections on load from backend
+  const collectionRefreshBusy = useRef(false);
+  // Fetch an authoritative snapshot; records deleted on the server must leave the cache.
   useEffect(() => {
-    fetchRemoteCollections().then((remoteData) => {
-      if (remoteData && remoteData.length > 0) {
-        setCollections((prev) => {
-          const existingIds = new Set(prev.map((c) => c.id));
-          const newFromRemote = remoteData.filter((r) => !existingIds.has(r.id));
-          return [...newFromRemote, ...prev];
-        });
-      }
-    });
-  }, []);
+    if (!user.isLoggedIn) return;
+    let active = true;
+    const refresh = async () => {
+      if (collectionRefreshBusy.current) return;
+      collectionRefreshBusy.current = true;
+      const requestedAt = Date.now();
+      try {
+        const remote = await fetchRemoteCollections();
+        if (active) setCollections(previous => reconcileCollections(previous, remote, requestedAt));
+      } catch (error) { console.warn('Collection refresh failed; local records preserved.', error); }
+      finally { collectionRefreshBusy.current = false; }
+    };
+    void refresh();
+    const timer = window.setInterval(refresh, 15000);
+    window.addEventListener('focus', refresh);
+    return () => { active = false; window.clearInterval(timer); window.removeEventListener('focus', refresh); };
+  }, [user.isLoggedIn, user.id]);
 
   // Fetch remote collectors on load from backend database (Supabase)
   useEffect(() => {
@@ -574,6 +587,7 @@ export default function App() {
     const newRecord: Collection = {
       ...data,
       id: newId,
+      syncState: 'pending',
     };
 
     // Add to local state
@@ -581,9 +595,8 @@ export default function App() {
 
     // Send to central backend database
     createRemoteCollection(newRecord).then((success) => {
-      if (success) {
-        console.log(`Collection ${newId} posted to backend API`);
-      }
+      setCollections(previous => previous.map(row => row.id === newId ? { ...row, syncState: success ? 'synced' : 'failed', syncedAt: success ? Date.now() : undefined } : row));
+      if (!success) showToast('Collection saved on this device. Server upload failed; the record is kept on this device.', 'error');
     });
 
     // Auto-create matching FX Transaction record to sync both systems
@@ -724,6 +737,7 @@ export default function App() {
         if (col.id === collectionId) {
           return {
             ...col,
+            syncState: 'pending',
             status: newStatus,
             targetAmount: tgt,
             actualAmountCollected: act,
@@ -743,6 +757,8 @@ export default function App() {
       shortageAmount: shortage,
       extraAmount: extra,
       summaryNote: summaryNote,
+    }).then(success => {
+      setCollections(previous => previous.map(row => row.id === collectionId ? { ...row, syncState: success ? 'synced' : 'failed', syncedAt: success ? Date.now() : undefined } : row));
     });
 
     // Auto-sync status change with FX Transaction!

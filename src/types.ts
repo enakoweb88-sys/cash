@@ -37,6 +37,8 @@ export interface Client {
 }
 
 export interface Collection {
+  syncState?: 'pending' | 'failed' | 'synced';
+  syncedAt?: number;
   id: string; // e.g. "COL-8923"
   clientId: string;
   clientName: string;
