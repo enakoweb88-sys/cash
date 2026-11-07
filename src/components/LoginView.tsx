@@ -50,7 +50,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onSignUp, current
         }
 
         if (!pinCode.trim()) {
-          setErrorMsg('Please enter your Security PIN / Password.');
+          setErrorMsg('Please enter your Account password.');
           setIsLoading(false);
           return;
         }
@@ -63,7 +63,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onSignUp, current
         });
 
         if (!res.success) {
-          setErrorMsg(res.error || 'Collector account not found or PIN code invalid.');
+          setErrorMsg(res.error || 'Collector account not found or password invalid.');
         }
       }
       setIsLoading(false);
@@ -193,7 +193,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onSignUp, current
 
                 <div className="space-y-1.5">
                   <label htmlFor="pin-code" className="block text-[11px] font-bold tracking-wider text-[#4a4a4a] uppercase">
-                    Security PIN Code / Password *
+                    Account password *
                   </label>
                   <div className="relative">
                     <Key className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-[#5f5e5e]" />
@@ -203,7 +203,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onSignUp, current
                       required
                       value={pinCode}
                       onChange={(e) => setPinCode(e.target.value)}
-                      placeholder="Enter 6-digit PIN or password"
+                      placeholder="Enter account password or password"
                       className="block w-full h-12 pl-10 pr-11 border border-[#e5e5e5] bg-[#ffffff] text-[#1a1c1c] font-mono text-sm focus:border-[#0891b2] focus:outline-none focus:ring-1 focus:ring-[#0891b2]"
                     />
                     <button

@@ -70,14 +70,17 @@ test('legacy assignment names must match fully, never by first name', () => {
   assert.equal(permissions.canViewCollection(undefined, {}), false);
   assert.equal(permissions.canViewCollection(field, {}), false);
 });
-test('senior collector role variants retain operational access with CEO-only management', () => {
-  for (const role of ['Senior Cash Officer', 'Senior Cash Collector', 'Senior Manager']) {
-    const senior = { ...field, role };
-    assert.equal(permissions.hasOperationalAccess(senior), true);
-    assert.equal(permissions.canViewCollection(senior, { assignedCollectorId: 'other' }), true);
-    assert.equal(permissions.canManageCollectors(senior), false);
-    assert.equal(permissions.canEditExistingRecords(senior), false);
+test('OS titles alone do not confer cash operational or administrative access', () => {
+  for (const role of ['CEO', 'CEO / Executive Manager', 'Senior Cash Officer', 'Senior Cash Collector', 'Senior Manager']) {
+    const ungranted = { ...field, role };
+    assert.equal(permissions.hasOperationalAccess(ungranted), false);
+    assert.equal(permissions.canManageCollectors(ungranted), false);
+    assert.equal(permissions.canEditExistingRecords(ungranted), false);
   }
+  const admin = { ...field, cashLevel: 'administrator' };
+  assert.equal(permissions.hasOperationalAccess(admin), true);
+  assert.equal(permissions.canManageCollectors(admin), true);
+  assert.equal(permissions.canViewCollection(admin, { assignedCollectorId: 'other' }), true);
 });
 
 test('FX creation sends the session token and caches the server transaction ID', async () => {
@@ -86,7 +89,7 @@ test('FX creation sends the session token and caches the server transaction ID',
     sent = options;
     return { ok: true, json: async () => ({ id: 'server-id', amountInXaf: 1000 }) };
   } });
-  s.storage.setItem('enako_access_token', 'test-session');
+  s.storage.setItem('enako_cash_os_session_v1', 'test-session');
   const api = s.load('src/api/cashApi.ts');
   assert.equal(await api.createRemoteTransaction({ amount: 2300, currency: 'NGN', amountInXaf: 1000, exchangeRate: rateInXaf('NGN', 2300) }), true);
   assert.equal(sent.headers.Authorization, 'Bearer test-session');

@@ -1,3 +1,4 @@
+import { cashDocumentUrl } from '../api/cashApi';
 import React, { useState } from 'react';
 import { 
   Plus, 
@@ -30,7 +31,7 @@ import {
 import { Collection, ViewType, CollectorUser } from '../types';
 import { formatXAF, INITIAL_USER } from '../data/mockData';
 import { downloadReceiptPDF, downloadDailyReportPDF } from '../utils/exportUtils';
-import { hasOperationalAccess, isSeniorCollector, canViewCollection } from '../utils/permissions';
+import { hasOperationalAccess, canViewCollection } from '../utils/permissions';
 
 interface DashboardViewProps {
   collections: Collection[];
@@ -38,7 +39,7 @@ interface DashboardViewProps {
   onNavigate: (view: ViewType) => void;
   onSelectCollection: (col: Collection) => void;
   onOpenStatusUpdate?: (col: Collection) => void;
-  onUpdateCollectionPhoto?: (id: string, photoUrl: string) => void;
+  onUpdateCollectionPhoto?: (id: string, photoUrl: string) => Promise<void>;
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
@@ -50,7 +51,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onUpdateCollectionPhoto,
 }) => {
   const isCeoOrManager = hasOperationalAccess(user);
-  const isSenior = isSeniorCollector(user);
   const firstName = user?.name ? user.name.trim().split(' ')[0] : 'Collector';
 
   // Helper to check if a collection was logged today (daily transactions)
@@ -71,6 +71,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
   // State for standalone Job Details Page view (replacing popup modals)
   const [selectedJobDetails, setSelectedJobDetails] = useState<Collection | null>(null);
+  const [receiptPreviewUrl, setReceiptPreviewUrl] = useState('');
+  React.useEffect(() => {
+    let active = true, objectUrl = '';
+    setReceiptPreviewUrl('');
+    const source = selectedJobDetails?.receiptUrl;
+    if (source?.startsWith('data:image/')) setReceiptPreviewUrl(source);
+    else if (source) cashDocumentUrl(source).then(url => { objectUrl = url; if (active) setReceiptPreviewUrl(url); else URL.revokeObjectURL(url); }).catch(() => {});
+    return () => { active = false; if (objectUrl) URL.revokeObjectURL(objectUrl); };
+  }, [selectedJobDetails?.receiptUrl]);
+
 
   // State for inspecting the exact email dispatched to the client
   const [showEmailPreview, setShowEmailPreview] = useState(false);
@@ -83,12 +93,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     if (files && files[0] && selectedJobDetails) {
       const file = files[0];
       const reader = new FileReader();
-      reader.onload = (event) => {
+      reader.onload = async (event) => {
         const base64Url = event.target?.result as string;
-        setSelectedJobDetails((prev) => (prev ? { ...prev, receiptUrl: base64Url } : null));
-        if (onUpdateCollectionPhoto) {
-          onUpdateCollectionPhoto(selectedJobDetails.id, base64Url);
-        }
+        try { if (onUpdateCollectionPhoto) { await onUpdateCollectionPhoto(selectedJobDetails.id, base64Url); setSelectedJobDetails(previous => previous ? { ...previous, receiptUrl: base64Url } : null); } } catch { /* Parent displays the save error. */ }
       };
       reader.readAsDataURL(file);
     }
@@ -483,7 +490,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 {selectedJobDetails.receiptUrl ? (
                   <div className="w-full flex flex-col items-center gap-3">
                     <img
-                      src={selectedJobDetails.receiptUrl}
+                      src={receiptPreviewUrl || undefined}
                       alt="Transaction Proof"
                       className="w-full h-auto max-h-[360px] object-contain rounded border border-[#e5e5e5] shadow-xs bg-white"
                     />
@@ -1130,7 +1137,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <span>Daily Operations ({new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' })})</span>
           </div>
           <h2 className="text-2xl font-bold tracking-tight text-slate-900 mt-1">
-            Welcome, {firstName} ({isSenior ? 'Senior Cash Officer' : 'CEO'})
+            Welcome, {firstName} (Cash Administrator)
           </h2>
           <p className="text-xs text-slate-500 mt-0.5">
             Real-time daily cash collection & liquidity operations console.

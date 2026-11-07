@@ -1,13 +1,13 @@
+import { saveCollectionReceipt } from './api/cashApi';
 import { reconcileCollections } from './utils/collectionSync';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   INITIAL_USER, 
-  DEFAULT_ACCOUNTS,
   INITIAL_CLIENTS, 
   INITIAL_COLLECTIONS, 
   formatXAF
 } from './data/mockData';
-import { Client, Collection, CollectorUser, UserAccount, ViewType, TransactionStatus, KycSubmission } from './types';
+import { Client, Collection, CollectorUser, UserAccount, CollectorRegistration, ViewType, TransactionStatus, KycSubmission } from './types';
 import { Sidebar } from './components/Sidebar';
 import { TopBar } from './components/TopBar';
 import { DashboardView } from './components/DashboardView';
@@ -31,7 +31,6 @@ import {
   updateRemoteCollectionStatus,
   fetchRemoteKycSubmissions,
   extractClientFromKycSubmission,
-  getInitialKycApprovedClients,
   createRemoteTransaction,
   settleRemoteTransaction,
   sendCollectionNotificationEmail,
@@ -40,8 +39,7 @@ import {
   createRemoteClient,
   createRemoteCollector,
   deleteRemoteCollector,
-  deleteAllRemoteCollectors,
-  authenticatePortalUser
+  authenticatePortalUser, restoreCashSession, logoutCashSession, CashProfile
 } from './api/cashApi';
 import { generateReceiptPdfBase64 } from './utils/exportUtils';
 import { beginCashSession, LAST_ACTIVITY_KEY, watchCashInactivity } from './utils/idleSession';
@@ -51,7 +49,6 @@ import {
   canEditExistingRecords,
   canManageCollectors,
   hasOperationalAccess,
-  normalizeCollectorRole,
 } from './utils/permissions';
 
 const VALID_VIEWS: ViewType[] = [
@@ -86,35 +83,9 @@ const getInitialView = (): ViewType => {
 };
 
 export default function App() {
-  // Purge stale demo/cached collections and old accounts on migration v6
-  if (typeof window !== 'undefined') {
-    const isClearedV6 = localStorage.getItem('enako_cash_data_cleared_v6');
-    if (!isClearedV6) {
-      localStorage.removeItem('enako_cash_accounts');
-      localStorage.removeItem('enako_collections');
-      localStorage.removeItem('enako_clients');
-      localStorage.removeItem('enako_drafts');
-      localStorage.removeItem('enako_cash_collections');
-      localStorage.removeItem('cash_collections');
-      localStorage.removeItem('afriland_collections');
-      localStorage.removeItem('afriland_clients');
-      localStorage.removeItem('afriland_drafts');
-      localStorage.removeItem('enako_cash_transactions');
-      localStorage.setItem('enako_cash_data_cleared_v6', 'true');
-    }
-  }
-
-  // Accounts Database (Persistent in localStorage)
-  const [accounts, setAccounts] = useState<UserAccount[]>(() => {
-    const saved = localStorage.getItem('enako_cash_accounts');
-    return saved ? JSON.parse(saved) : DEFAULT_ACCOUNTS;
-  });
-
-  // Authentication State
-  const [user, setUser] = useState<CollectorUser>(() => {
-    const saved = localStorage.getItem('enako_user') || localStorage.getItem('afriland_user');
-    return saved ? JSON.parse(saved) : INITIAL_USER;
-  });
+  // Profiles are server responses, never an offline credential database.
+  const [accounts, setAccounts] = useState<UserAccount[]>([]);
+  const [user, setUser] = useState<CollectorUser>(INITIAL_USER);
 
   // Current Screen / View (Persisted across page reloads via URL hash & localStorage)
   const [currentView, setCurrentView] = useState<ViewType>(getInitialView);
@@ -149,22 +120,9 @@ export default function App() {
     }
   }, [user, currentView]);
 
-  // Clients State - Automatically initialized with Approved KYC Profiles
-  const [clients, setClients] = useState<Client[]>(() => {
-    const saved = localStorage.getItem('enako_clients');
-    const parsed: Client[] = saved ? JSON.parse(saved) : [];
-    return parsed;
-  });
-
-  // Collections (Settled / Server synced from Backend API)
-  const [collections, setCollections] = useState<Collection[]>(() => {
-    const saved = localStorage.getItem('enako_collections');
-    if (saved && !localStorage.getItem('enako_collections_backup_before_sync_v1')) {
-      try { localStorage.setItem('enako_collections_backup_before_sync_v1', saved); }
-      catch (error) { console.warn('Legacy cache backup could not be saved.', error); }
-    }
-    return saved ? JSON.parse(saved) : [];
-  });
+  // Legacy shared ledgers remain untouched for approved migration/export, never trusted as this session's records.
+  const [clients, setClients] = useState<Client[]>([]);
+  const [collections, setCollections] = useState<Collection[]>([]);
 
   // Role guard logic: Check if user is CEO or Manager
   const hasFullOperationalAccess = hasOperationalAccess(user);
@@ -215,21 +173,17 @@ export default function App() {
     return () => { active = false; window.clearInterval(timer); window.removeEventListener('focus', refresh); };
   }, [user.isLoggedIn, user.id]);
 
-  // Fetch remote collectors on load from backend database (Supabase)
+  // Only authorized administrators can list collector profiles.
   useEffect(() => {
-    fetchRemoteCollectors().then((remoteCollectors) => {
-      if (remoteCollectors && remoteCollectors.length > 0) {
-        setAccounts((prev) => {
-          const existingEmails = new Set(prev.map((a) => a.email.toLowerCase()));
-          const newFromRemote = remoteCollectors.filter((r: any) => !existingEmails.has(r.email.toLowerCase()));
-          return [...newFromRemote, ...prev];
-        });
-      }
-    });
-  }, []);
+    if (!user.isLoggedIn || !canManageCollectors(user)) return;
+    let active = true;
+    fetchRemoteCollectors().then(rows => { if (active) setAccounts(rows); });
+    return () => { active = false; };
+  }, [user.isLoggedIn, user.id, user.cashLevel]);
 
   // Load manually registered clients from the shared database on every device.
   useEffect(() => {
+    if (!user.isLoggedIn) return;
     fetchRemoteClients().then(async (remoteClients) => {
       setClients((previous) => {
         const merged = [...previous];
@@ -241,14 +195,8 @@ export default function App() {
         return merged;
       });
 
-      // Backfill manual clients created before shared persistence was introduced.
-      const remoteIds = new Set(remoteClients.map((client) => client.id));
-      const unsyncedManualClients = clients.filter(
-        (client) => !client.kycId && !remoteIds.has(client.id)
-      );
-      await Promise.all(unsyncedManualClients.map((client) => createRemoteClient(client)));
     });
-  }, []);
+  }, [user.isLoggedIn, user.id]);
 
   // Auto-sync approved KYC submissions to Client Directory
   const syncApprovedKycToClients = useCallback(async () => {
@@ -283,8 +231,8 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    syncApprovedKycToClients();
-  }, [syncApprovedKycToClients]);
+    if (user.isLoggedIn && user.cashLevel === 'administrator') void syncApprovedKycToClients();
+  }, [syncApprovedKycToClients, user.isLoggedIn, user.id, user.cashLevel]);
 
   const handleAutoCreateClientFromKyc = (sub: KycSubmission) => {
     const newClient = extractClientFromKycSubmission(sub);
@@ -301,22 +249,15 @@ export default function App() {
   // Toast notifications
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'info' | 'error' } | null>(null);
 
-  // Persistence
+  // Retire legacy profile/credential caches; authentication state is restored from the server.
   useEffect(() => {
-    localStorage.setItem('enako_user', JSON.stringify(user));
-  }, [user]);
-
-  useEffect(() => {
-    localStorage.setItem('enako_cash_accounts', JSON.stringify(accounts));
-  }, [accounts]);
-
-  useEffect(() => {
-    localStorage.setItem('enako_clients', JSON.stringify(clients));
-  }, [clients]);
-
-  useEffect(() => {
-    localStorage.setItem('enako_collections', JSON.stringify(collections));
-  }, [collections]);
+    localStorage.removeItem('enako_cash_accounts');
+    localStorage.removeItem('enako_user');
+    localStorage.removeItem('afriland_user');
+    localStorage.removeItem('enako_access_token');
+    localStorage.removeItem('access_token');
+    sessionStorage.removeItem('enako_access_token');
+  }, []);
 
   // Toast auto-dismiss
   useEffect(() => {
@@ -332,214 +273,34 @@ export default function App() {
     setToastMessage({ text, type });
   };
 
-  // Login handler
+  const acceptProfile = (profile: CashProfile) => {
+    setUser({ id: profile.id, name: profile.name, email: profile.email, terminalId: profile.terminalId, branch: profile.branch, cashLevel: profile.cashLevel, role: profile.cashLevel === 'administrator' ? 'Cash Administrator' : 'Field Cash Collector', avatarLetter: profile.name[0]?.toUpperCase() || 'C', isLoggedIn: true });
+  };
+
   const handleLogin = async (credentials: { emailOrPhone: string; password?: string; role?: string; remember: boolean }): Promise<{ success: boolean; error?: string }> => {
-    const term = credentials.emailOrPhone.trim().toLowerCase();
-    if (!credentials.password) {
-      return { success: false, error: 'Password is required.' };
-    }
-    
-    // 1. CEO / Executive Manager Authentication
-    if (term === 'ceo@enako.com') {
-      const auth = await authenticatePortalUser(term, credentials.password);
-      if (!auth.success) return auth;
-      const ceoUser: CollectorUser = {
-        id: 'ACC-CEO-01',
-        name: 'ENAKO CEO',
-        email: 'ceo@enako.com',
-        phone: '+237 690 000 001',
-        terminalId: 'TRM-CEO-01',
-        branch: 'Global Headquarters',
-        role: 'CEO / Executive Manager',
-        avatarLetter: 'E',
-        isLoggedIn: true,
-      };
-      beginCashSession();
-      setUser(ceoUser);
-      showToast('Welcome back, ENAKO CEO! Executive session active.', 'success');
-      return { success: true };
-    }
-
-    // Ensure accounts are loaded (fetch if state hasn't populated yet)
-    let currentAccounts = accounts;
-    if (currentAccounts.length === 0) {
-      try {
-        const remoteCollectors = await fetchRemoteCollectors();
-        if (remoteCollectors && remoteCollectors.length > 0) {
-          setAccounts(remoteCollectors);
-          currentAccounts = remoteCollectors;
-        }
-      } catch (e) {
-        console.warn('Could not fetch collectors on login:', e);
-      }
-    }
-
-    // 2. Collector / Senior Officer Authentication against accounts
-    const cleanTermDigits = term.replace(/\D/g, '');
-    const match = currentAccounts.find((acc) => {
-      const accEmail = (acc.email || '').toLowerCase().trim();
-      const accTerminal = (acc.terminalId || '').toLowerCase().trim();
-      
-      // Match by Email
-      if (accEmail && accEmail === term) return true;
-      
-      // Match by Terminal ID (e.g. TRM-3364, trm-3364, or 3364)
-      if (accTerminal && (accTerminal === term || (cleanTermDigits && accTerminal.replace(/\D/g, '') === cleanTermDigits))) {
-        return true;
-      }
-      
-      // Match by Phone (handles +237, spaces, dashes)
-      if (acc.phone) {
-        const cleanPhoneDigits = acc.phone.replace(/\D/g, '');
-        if (cleanPhoneDigits && cleanTermDigits) {
-          if (
-            cleanPhoneDigits === cleanTermDigits ||
-            cleanPhoneDigits.endsWith(cleanTermDigits) ||
-            cleanTermDigits.endsWith(cleanPhoneDigits)
-          ) {
-            return true;
-          }
-        }
-      }
-      return false;
-    });
-
-    if (!match) {
-      return { success: false, error: 'No collector account found matching phone / email / terminal ID.' };
-    }
-
-    // 3. Verify PIN / Password
-    const enteredPassword = credentials.password.trim();
-    const isPinMatch =
-      (match.password && enteredPassword === match.password.trim()) ||
-      enteredPassword === '123456' ||
-      enteredPassword === 'password123';
-
-    if (!isPinMatch) {
-      // Optional fallback: attempt backend auth for accounts that may have an 8+ char backend password
-      if (enteredPassword.length >= 8) {
-        const auth = await authenticatePortalUser(match.email, enteredPassword);
-        if (!auth.success) {
-          return { success: false, error: 'Incorrect PIN code or password. Please verify and try again.' };
-        }
-      } else {
-        return { success: false, error: 'Incorrect PIN code. Please verify your security PIN and try again.' };
-      }
-    }
-
-    const loggedInUser: CollectorUser = {
-      id: match.id,
-      name: match.fullName,
-      email: match.email,
-      phone: match.phone,
-      terminalId: match.terminalId,
-      branch: match.branch,
-      role: match.role || credentials.role || 'Field Cash Collector',
-      avatarLetter: match.firstName?.[0] ? match.firstName[0].toUpperCase() : 'C',
-      isLoggedIn: true,
-    };
-
+    if (!credentials.password) return { success: false, error: 'Enter your password.' };
+    const result = await authenticatePortalUser(credentials.emailOrPhone, credentials.password);
+    if (!result.success || !result.user) return { success: false, error: result.error };
+    setAccounts([]); setCollections([]); setClients([]);
+    acceptProfile(result.user);
     beginCashSession();
-    setUser(loggedInUser);
-    const firstName = match.firstName || match.fullName.split(' ')[0];
-    showToast(`Welcome back, ${firstName}! Terminal session active (${match.branch}).`, 'success');
+    showToast('Signed in to Cash Dashboard.', 'success');
     return { success: true };
   };
 
-  // Sign Up handler
-  const handleSignUp = (userData: {
-    firstName: string;
-    lastName: string;
-    email: string;
-    phone?: string;
-    branch: string;
-    role: string;
-    password?: string;
-  }): { success: boolean; error?: string } => {
-    const emailLower = userData.email.trim().toLowerCase();
-    const existing = accounts.find((a) => a.email.toLowerCase() === emailLower);
-    if (existing) {
-      return { success: false, error: 'An account with this email address already exists. Please log in.' };
-    }
+  const handleSignUp = (): { success: boolean; error?: string } => ({ success: false, error: 'Ask an authorized cash administrator to create and provision your account.' });
 
-    const fullName = `${userData.firstName.trim()} ${userData.lastName.trim()}`;
-    const newId = `COL-${Math.floor(1000 + Math.random() * 9000)}`;
-    const newTerminalId = `ENK-${Math.floor(100 + Math.random() * 900)}`;
-
-    const newAccount: UserAccount = {
-      id: newId,
-      firstName: userData.firstName.trim(),
-      lastName: userData.lastName.trim(),
-      fullName,
-      email: emailLower,
-      phone: userData.phone,
-      password: userData.password,
-      branch: userData.branch || 'Douala Main Hub',
-      role: normalizeCollectorRole(userData.role),
-      terminalId: newTerminalId,
-      createdAt: new Date().toISOString(),
-    };
-
-    setAccounts((prev) => [newAccount, ...prev]);
-    // Persist to Supabase DB
-    createRemoteCollector(newAccount).catch((err) => console.warn('Collector persistence note:', err));
-
-    const newUser: CollectorUser = {
-      id: newId,
-      name: fullName,
-      email: emailLower,
-      phone: userData.phone,
-      terminalId: newTerminalId,
-      branch: userData.branch || 'Douala Main Hub',
-      role: normalizeCollectorRole(userData.role),
-      avatarLetter: userData.firstName[0] ? userData.firstName[0].toUpperCase() : 'C',
-      isLoggedIn: true,
-    };
-
-    beginCashSession();
-    setUser(newUser);
-    showToast(`Account created successfully! Welcome, ${userData.firstName.trim()}!`, 'success');
-    return { success: true };
-  };
-
-  // Delete individual collector
+  // Deactivation preserves cash history and requires an explicit target confirmation.
   const handleDeleteAccount = async (id: string) => {
+    const confirmation = window.prompt('Deactivate this collector and retain all history. Enter collector ID: ' + id);
+    if (confirmation !== id) return;
+    const reason = window.prompt('Reason for deactivation (at least 10 characters):');
+    if (!reason || reason.trim().length < 10) return;
     try {
-      await deleteRemoteCollector(id);
-      setAccounts((prev) => {
-        const next = prev.filter((a) => a.id !== id && a.terminalId !== id);
-        localStorage.setItem('enako_cash_accounts', JSON.stringify(next));
-        return next;
-      });
-      setCollections((prev) => {
-        const next = prev.filter((c) => c.assignedCollectorId !== id);
-        localStorage.setItem('enako_collections', JSON.stringify(next));
-        return next;
-      });
-      showToast('Collector and their records deleted successfully', 'info');
-    } catch (e) {
-      console.error(e);
-      showToast('Failed to delete collector', 'error');
-    }
-  };
-
-  // Delete all collectors and their collection history
-  const handleDeleteAllAccounts = async () => {
-    if (!window.confirm('Are you sure you want to delete ALL cash collectors and their complete collection history? This action cannot be undone.')) {
-      return;
-    }
-    try {
-      await deleteAllRemoteCollectors();
-      setAccounts([]);
-      setCollections([]);
-      localStorage.removeItem('enako_cash_accounts');
-      localStorage.removeItem('enako_collections');
-      localStorage.removeItem('enako_cash_collections');
-      showToast('All collectors and collection history successfully purged', 'success');
-    } catch (e) {
-      console.error(e);
-      showToast('Failed to delete all collectors', 'error');
-    }
+      await deleteRemoteCollector(id, reason.trim());
+      setAccounts(previous => previous.filter(account => account.id !== id));
+      showToast('Collector deactivated. Collection history retained.', 'info');
+    } catch { showToast('Deactivation failed. Only dedicated cash-managed accounts can be deactivated.', 'error'); }
   };
 
   // Logout handler
@@ -549,7 +310,9 @@ export default function App() {
       isLoggedIn: false,
     };
     setUser(loggedOutUser);
-    localStorage.setItem('enako_user', JSON.stringify(loggedOutUser));
+    void logoutCashSession().catch(() => {});
+    setAccounts([]); setCollections([]); setClients([]);
+    localStorage.removeItem('enako_user');
     localStorage.removeItem('afriland_user');
     localStorage.removeItem('enako_access_token');
     localStorage.removeItem('access_token');
@@ -572,6 +335,19 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    let active = true;
+    const restore = async () => {
+      const profile = await restoreCashSession();
+      if (!active) return;
+      if (profile) acceptProfile(profile);
+      else { setUser(INITIAL_USER); setAccounts([]); setCollections([]); setClients([]); }
+    };
+    void restore();
+    const timer = window.setInterval(restore, 30000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, []);
+
+  useEffect(() => {
     if (!user.isLoggedIn) return;
     return watchCashInactivity(() => {
       handleLogout();
@@ -580,49 +356,26 @@ export default function App() {
   }, [user.isLoggedIn, handleLogout]);
 
   // Save new collection and submit directly to central backend API
-  const handleSaveCollection = (data: Omit<Collection, 'id'>) => {
-    const randomIdNum = Math.floor(1000 + Math.random() * 9000);
-    const newId = `COL-${randomIdNum}`;
+  const handleSaveCollection = async (data: Omit<Collection, 'id'>) => {
+    const newId = 'COL-' + crypto.randomUUID();
 
     const newRecord: Collection = {
       ...data,
       id: newId,
       syncState: 'pending',
+      status: user.cashLevel === 'administrator' ? data.status : 'PENDING',
+      assignedCollectorId: user.cashLevel === 'administrator' ? (data.assignedCollectorId || user.id) : user.id,
     };
 
-    // Add to local state
-    setCollections((prev) => [newRecord, ...prev]);
+    const saved = await createRemoteCollection(newRecord);
+    if (!saved) { showToast('Collection was not saved. Check access and submitted details.', 'error'); return; }
+    newRecord.syncState = 'synced'; newRecord.syncedAt = Date.now();
+    setCollections(previous => [newRecord, ...previous]);
 
-    // Send to central backend database
-    createRemoteCollection(newRecord).then((success) => {
-      setCollections(previous => previous.map(row => row.id === newId ? { ...row, syncState: success ? 'synced' : 'failed', syncedAt: success ? Date.now() : undefined } : row));
-      if (!success) showToast('Collection saved on this device. Server upload failed; the record is kept on this device.', 'error');
-    });
-
-    // Auto-create matching FX Transaction record to sync both systems
-    const fxStatus = data.status === 'COMPLETE' ? 'SETTLED' : 'PENDING';
-    const fxTx = {
-      id: `FX-${randomIdNum}`,
-      entity: data.clientName,
-      type: data.type === 'PAYOUT' ? 'Send' : 'Receive',
-      channel: data.depositDestination || 'Cash Collection',
-      currency: data.currency || 'XAF',
-      amount: data.amount,
-      amountInXaf: data.amount,
-      exchangeRate: data.exchangeRate || 1,
-      buyingRate: 1,
-      sellingRate: 1,
-      status: fxStatus,
-      description: `Ref: ${newId} | Assigned to ${data.assignedCollectorName || 'Collector'}`,
-      createdAt: data.timestamp || new Date().toISOString(),
-      collectionId: newId,
-      assignedCollectorId: data.assignedCollectorId,
-      assignedCollectorName: data.assignedCollectorName,
-    };
-    createRemoteTransaction(fxTx);
+    // The server creates the linked accounting record atomically with the collection.
 
     // Deduct from client balance if status is COMPLETE
-    if (data.status === 'COMPLETE') {
+    if (newRecord.status === 'COMPLETE') {
       setClients((prevClients) =>
         prevClients.map((client) => {
           if (client.id === data.clientId) {
@@ -647,9 +400,9 @@ export default function App() {
     } catch (err) {
       console.warn('Could not generate receipt PDF base64 for email:', err);
     }
-    sendCollectionNotificationEmail(newRecord, recipientEmail, 'CREATED', pdfBase64);
+    if (user.cashLevel === 'administrator') void sendCollectionNotificationEmail(newRecord, recipientEmail, 'CREATED', pdfBase64);
 
-    showToast(`Collection ${newId} created & receipt PDF dispatched to ${recipientEmail}!`, 'success');
+    showToast('Collection saved. Receipt delivery is tracked separately.', 'success');
     setActiveReceipt(newRecord);
     setCurrentView('dashboard');
 
@@ -657,18 +410,12 @@ export default function App() {
     setSelectedClientForCollection(null);
   };
 
-  // Add new collector account
-  const handleAddAccount = (accData: Omit<UserAccount, 'id' | 'createdAt'>) => {
-    const randomIdNum = Math.floor(1000 + Math.random() * 9000);
-    const newAccount: UserAccount = {
-      ...accData,
-      id: `ACC-${randomIdNum}`,
-      createdAt: new Date().toISOString(),
-    };
-    setAccounts((prev) => [newAccount, ...prev]);
-    // Persist collector to Supabase DB
-    createRemoteCollector(newAccount).catch((err) => console.warn('Collector persistence note:', err));
-    showToast(`Collector ${newAccount.fullName} (${newAccount.terminalId}) registered & synced to Supabase!`, 'success');
+  // Password exists only in the registration request, never profile state/storage.
+  const handleAddAccount = async (data: CollectorRegistration) => {
+    if (!canManageCollectors(user)) throw new Error('Cash administrator permission required');
+    const account: UserAccount = await createRemoteCollector(data);
+    setAccounts(previous => [account, ...previous]);
+    showToast('Collector account created. Access provisioning approval is required before login.', 'info');
   };
 
   // Add new client to database
@@ -691,7 +438,7 @@ export default function App() {
   };
 
   // Handle status update, received amounts, and settlement notes
-  const handleSaveStatus = (
+  const handleSaveStatus = async (
     collectionId: string, 
     newStatus: TransactionStatus, 
     shortage: number, 
@@ -726,18 +473,22 @@ export default function App() {
           targetAmount: tgt,
           actualAmountCollected: act,
           time: 'Now',
+          timestamp: new Date().toISOString(),
           status: newStatus,
           shortageAmount: shortage,
           extraAmount: extra,
           summaryNote: summaryNote,
         };
 
+    const saved = await updateRemoteCollectionStatus(collectionId, newStatus, { actualAmountCollected: act, shortageAmount: shortage, extraAmount: extra, summaryNote });
+    if (!saved) { showToast('Status was not saved. The record may already be final or inaccessible.', 'error'); return; }
     setCollections((prevCollections) =>
       prevCollections.map((col) => {
         if (col.id === collectionId) {
           return {
             ...col,
-            syncState: 'pending',
+            syncState: 'synced',
+            syncedAt: Date.now(),
             status: newStatus,
             targetAmount: tgt,
             actualAmountCollected: act,
@@ -751,22 +502,8 @@ export default function App() {
       })
     );
 
-    // Send update to central backend database
-    updateRemoteCollectionStatus(collectionId, newStatus, {
-      actualAmountCollected: act,
-      shortageAmount: shortage,
-      extraAmount: extra,
-      summaryNote: summaryNote,
-    }).then(success => {
-      setCollections(previous => previous.map(row => row.id === collectionId ? { ...row, syncState: success ? 'synced' : 'failed', syncedAt: success ? Date.now() : undefined } : row));
-    });
-
     // Auto-sync status change with FX Transaction!
     if (newStatus === 'COMPLETE') {
-      const fxId = `FX-${collectionId.replace('COL-', '')}`;
-      settleRemoteTransaction(fxId, shortage);
-      settleRemoteTransaction(collectionId, shortage);
-
       // Deduct from client balance and dispatch completion alert
       const targetClient = clients.find((c) => c.id === updatedCol.clientId || c.name === updatedCol.clientName);
       const recipientEmail = updatedCol.clientEmail || targetClient?.email || 'enakoweb88@gmail.com';
@@ -776,7 +513,7 @@ export default function App() {
       } catch (err) {
         console.warn('Could not generate settlement receipt PDF base64 for email:', err);
       }
-      sendCollectionNotificationEmail(updatedCol, recipientEmail, 'COMPLETED', pdfBase64);
+      if (user.cashLevel === 'administrator') void sendCollectionNotificationEmail(updatedCol, recipientEmail, 'COMPLETED', pdfBase64);
 
       if (existingCol) {
         setClients((prevClients) =>
@@ -793,18 +530,16 @@ export default function App() {
           })
         );
       }
-      showToast(`Collection #${collectionId} COMPLETED & update email sent to ${recipientEmail}!`, 'success');
+      showToast('Collection completed. Receipt delivery is tracked separately.', 'success');
     } else {
       showToast(`Transaction #${collectionId} status updated to ${newStatus}.`, 'success');
     }
   };
 
   // Update or attach transaction proof photo
-  const handleUpdateCollectionPhoto = (id: string, photoUrl: string) => {
-    setCollections((prev) =>
-      prev.map((c) => (c.id === id ? { ...c, receiptUrl: photoUrl } : c))
-    );
-    showToast(`Transaction #${id} proof photo saved & attached!`, 'success');
+  const handleUpdateCollectionPhoto = async (id: string, photoUrl: string) => {
+    try { const stored = await saveCollectionReceipt(id, photoUrl); setCollections(previous => previous.map(item => item.id === id ? { ...item, receiptUrl: stored.receiptUrl } : item)); showToast('Receipt stored securely', 'success'); }
+    catch (error) { showToast(error instanceof Error ? error.message : 'Receipt could not be saved', 'error'); throw error; }
   };
 
   // Select client from Clients directory and jump to New Collection screen
@@ -826,7 +561,8 @@ export default function App() {
     localStorage.removeItem('afriland_collections');
     localStorage.removeItem('afriland_drafts');
     localStorage.removeItem('afriland_user');
-    showToast('Terminal factory reset complete.', 'success');
+    handleLogout();
+    showToast('Terminal reset complete and session signed out.', 'success');
   };
 
   // When not logged in, render the Login Screen
@@ -949,7 +685,6 @@ export default function App() {
               currentUser={user}
               onAddAccount={mayManageCollectors ? handleAddAccount : undefined}
               onDeleteAccount={mayManageCollectors ? handleDeleteAccount : undefined}
-              onDeleteAllAccounts={mayManageCollectors ? handleDeleteAllAccounts : undefined}
               onShowToast={showToast}
               onNavigate={setCurrentView}
             />

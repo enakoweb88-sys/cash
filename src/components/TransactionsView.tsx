@@ -258,7 +258,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({ user, onNavi
     const periodLabel = getPeriodLabel();
     const targetItems = activePeriodItems.length > 0 ? activePeriodItems : items;
 
-    const wsData = [
+    const wsData: Array<Array<string | number>> = [
       [`ENAKO CASH & FX TRANSACTIONS REPORT - ${periodLabel.toUpperCase()}`],
       [`Period: ${periodLabel}`, `Terminal: ${user.terminalId}`, `Export Date: ${new Date().toLocaleDateString()}`],
       [],

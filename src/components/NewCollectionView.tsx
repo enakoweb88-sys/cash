@@ -23,7 +23,7 @@ interface NewCollectionViewProps {
   accounts?: UserAccount[];
   currentUser?: CollectorUser;
   initialSelectedClient?: Client | null;
-  onSaveCollection: (collection: Omit<Collection, 'id'>) => void;
+  onSaveCollection: (collection: Omit<Collection, 'id'>) => Promise<void>;
   onNavigate: (view: ViewType) => void;
   isOffline?: boolean;
 }
@@ -206,12 +206,13 @@ export const NewCollectionView: React.FC<NewCollectionViewProps> = ({
     return true;
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    if (isSubmitting) return;
     if (!validateForm()) return;
     if (!selectedClient) return;
 
     setIsSubmitting(true);
-    setTimeout(() => {
+    try {
       const numTarget = Number(cleanCommas(targetAmount));
       const numActual = actualAmountCollected.trim() !== '' 
         ? Number(cleanCommas(actualAmountCollected)) 
@@ -225,7 +226,7 @@ export const NewCollectionView: React.FC<NewCollectionViewProps> = ({
       const targetCollector = accounts.find((a) => a.terminalId === assignedCollectorId || a.id === assignedCollectorId);
       const collectorName = targetCollector ? targetCollector.fullName : 'Field Cash Collector';
 
-      onSaveCollection({
+      await onSaveCollection({
         clientId: selectedClient.id,
         clientName: selectedClient.name,
         amount: numActual > 0 ? numActual : numTarget,
@@ -242,12 +243,12 @@ export const NewCollectionView: React.FC<NewCollectionViewProps> = ({
         notes: notes || undefined,
         receiptName: receiptFile?.name,
         receiptUrl: receiptFile?.url,
-        assignedCollectorId: assignedCollectorId || targetCollector?.terminalId,
+        assignedCollectorId: targetCollector?.id || currentUser?.id,
         assignedCollectorName: collectorName,
         clientEmail: clientEmail.trim() || selectedClient.email || undefined,
       });
-      setIsSubmitting(false);
-    }, 400);
+    } catch { setErrorMessage('The collection could not be saved. Please retry.'); }
+    finally { setIsSubmitting(false); }
   };
 
   const outstandingBal = selectedClient ? selectedClient.outstandingBalance : 0;

@@ -123,6 +123,7 @@ export interface CollectorUser {
   role?: string;
   avatarLetter: string;
   isLoggedIn: boolean;
+  cashLevel?: 'operator' | 'administrator';
 }
 
 export interface UserAccount {
@@ -132,7 +133,6 @@ export interface UserAccount {
   fullName: string;
   email: string;
   phone?: string;
-  password?: string;
   branch: string;
   role: string;
   terminalId: string;
@@ -148,3 +148,6 @@ export interface FilterOptions {
   balanceFilter: string;
 }
 
+
+// Request-only credential; never use this type as an account response/cache.
+export type CollectorRegistration = Omit<UserAccount, 'id' | 'createdAt'> & { password: string };

@@ -1,3 +1,4 @@
+import { fetchCashExchangeRates, saveCashExchangeRates } from '../api/cashApi';
 import React, { useState, useEffect } from 'react';
 import { 
   ArrowLeft, 
@@ -13,41 +14,17 @@ import { ViewType, CollectorUser, ExchangeRateItem } from '../types';
 import { canEditExistingRecords } from '../utils/permissions';
 
 export const INITIAL_CURRENCIES: Record<string, ExchangeRateItem> = {
-  USD: { code: 'USD', name: 'US Dollar', flag: '💵', buyingRate: '615', sellingRate: '625', change24h: 0.8 },
-  EUR: { code: 'EUR', name: 'Euro', flag: '💶', buyingRate: '655', sellingRate: '665', change24h: 0.3 },
-  GBP: { code: 'GBP', name: 'British Pound', flag: '🇬🇧', buyingRate: '780', sellingRate: '795', change24h: -0.2 },
-  USDT: { code: 'USDT', name: 'Tether Crypto Dollar', flag: '🪙', buyingRate: '630', sellingRate: '645', change24h: 1.2 },
-  NGN: { code: 'NGN', name: 'Nigerian Naira', flag: '🇳🇬', buyingRate: '2500', sellingRate: String(1000000 / 420), change24h: -0.5, quoteBasis: 'NGN_PER_1000_XAF' },
-  CNY: { code: 'CNY', name: 'Chinese Yuan', flag: '🇨🇳', buyingRate: '85', sellingRate: '90', change24h: 0.1 },
+  USD: { code: 'USD', name: 'US Dollar', flag: '💵', buyingRate: '', sellingRate: '', change24h: 0 },
+  EUR: { code: 'EUR', name: 'Euro', flag: '💶', buyingRate: '', sellingRate: '', change24h: 0 },
+  GBP: { code: 'GBP', name: 'British Pound', flag: '🇬🇧', buyingRate: '', sellingRate: '', change24h: 0 },
+  USDT: { code: 'USDT', name: 'Tether Crypto Dollar', flag: '🪙', buyingRate: '', sellingRate: '', change24h: 0 },
+  NGN: { code: 'NGN', name: 'Nigerian Naira', flag: '🇳🇬', buyingRate: '', sellingRate: '', change24h: 0, quoteBasis: 'NGN_PER_1000_XAF' },
+  CNY: { code: 'CNY', name: 'Chinese Yuan', flag: '🇨🇳', buyingRate: '', sellingRate: '', change24h: 0 },
 };
 
-export function getStoredRates(): Record<string, ExchangeRateItem> {
-  try {
-    const raw = localStorage.getItem('enako_cash_exchange_rates');
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      // Legacy settings quoted XAF per 1,000 NGN. Preserve their value while
-      // converting the quotation direction, once, using the basis marker.
-      if (parsed.NGN && parsed.NGN.quoteBasis !== 'NGN_PER_1000_XAF') {
-        const legacy = parsed.NGN;
-        parsed.NGN = {
-          ...legacy,
-          buyingRate: Number(legacy.buyingRate) > 0 ? String(1000000 / Number(legacy.buyingRate)) : '',
-          sellingRate: Number(legacy.sellingRate) > 0 ? String(1000000 / Number(legacy.sellingRate)) : '',
-          quoteBasis: 'NGN_PER_1000_XAF',
-        };
-      }
-      return { ...INITIAL_CURRENCIES, ...parsed };
-    }
-  } catch (e) {}
-  return INITIAL_CURRENCIES;
-}
-
-export function saveStoredRates(rates: Record<string, ExchangeRateItem>) {
-  try {
-    localStorage.setItem('enako_cash_exchange_rates', JSON.stringify(rates));
-  } catch (e) {}
-}
+let verifiedRates: Record<string, ExchangeRateItem> = { ...INITIAL_CURRENCIES };
+export function getStoredRates() { return verifiedRates; }
+export function saveStoredRates(rates: Record<string, ExchangeRateItem>) { verifiedRates = rates; }
 
 interface ExchangeRatesViewProps {
   user: CollectorUser;
@@ -66,30 +43,20 @@ export const ExchangeRatesView: React.FC<ExchangeRatesViewProps> = ({
   const [saving, setSaving] = useState(false);
   const [editForm, setEditForm] = useState<Record<string, { buyingRate: string; sellingRate: string }>>({});
 
-  useEffect(() => {
-    const current = getStoredRates();
-    setRates(current);
-    const initial: Record<string, { buyingRate: string; sellingRate: string }> = {};
-    Object.keys(current).forEach((code) => {
-      initial[code] = {
-        buyingRate: current[code].buyingRate || '',
-        sellingRate: current[code].sellingRate || '',
-      };
-    });
-    setEditForm(initial);
-  }, []);
-
-  const handleRefresh = () => {
+  const handleRefresh = async () => {
     setLoading(true);
-    setTimeout(() => {
-      const current = getStoredRates();
-      setRates(current);
-      setLoading(false);
-      onShowToast('Exchange rates refreshed from database', 'info');
-    }, 300);
+    try {
+      const rows: ExchangeRateItem[] = await fetchCashExchangeRates();
+      const current = { ...INITIAL_CURRENCIES };
+      for (const row of rows) current[row.code] = { ...row, quoteBasis: row.code === 'NGN' ? 'NGN_PER_1000_XAF' : undefined };
+      saveStoredRates(current); setRates(current);
+      setEditForm(Object.fromEntries(Object.entries(current).map(([code, item]) => [code, { buyingRate: item.buyingRate, sellingRate: item.sellingRate }])));
+    } catch (error) { onShowToast(error instanceof Error ? error.message : 'Cash rates unavailable', 'error'); }
+    finally { setLoading(false); }
   };
+  useEffect(() => { void handleRefresh(); }, []);
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!canEditRates) {
       onShowToast('Senior Cash Officers can view rates but cannot change them.', 'info');
@@ -100,7 +67,7 @@ export const ExchangeRatesView: React.FC<ExchangeRatesViewProps> = ({
       return;
     }
     setSaving(true);
-    setTimeout(() => {
+    try {
       const updated: Record<string, ExchangeRateItem> = { ...rates };
       Object.keys(editForm).forEach((code) => {
         if (updated[code]) {
@@ -113,12 +80,13 @@ export const ExchangeRatesView: React.FC<ExchangeRatesViewProps> = ({
         }
       });
 
+      await saveCashExchangeRates(Object.values(updated));
       setRates(updated);
       saveStoredRates(updated);
       setSaving(false);
       onShowToast('Live market buying & selling rates saved successfully!', 'success');
       onNavigate('transactions');
-    }, 400);
+    } catch (error) { onShowToast(error instanceof Error ? error.message : 'Cash rates were not saved', 'error'); } finally { setSaving(false); }
   };
 
   const rateList: ExchangeRateItem[] = Object.values(rates);

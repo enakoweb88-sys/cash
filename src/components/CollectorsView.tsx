@@ -25,7 +25,7 @@ import {
   ChevronRight,
   Trash2
 } from 'lucide-react';
-import { UserAccount, CollectorUser, Collection } from '../types';
+import { UserAccount, CollectorUser, Collection, CollectorRegistration } from '../types';
 import { formatXAF } from '../data/mockData';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -35,9 +35,8 @@ interface CollectorsViewProps {
   accounts: UserAccount[];
   collections: Collection[];
   currentUser: CollectorUser;
-  onAddAccount?: (account: Omit<UserAccount, 'id' | 'createdAt'>) => void;
+  onAddAccount?: (account: CollectorRegistration) => Promise<void>;
   onDeleteAccount?: (id: string) => void;
-  onDeleteAllAccounts?: () => void;
   onShowToast: (msg: string, type?: 'success' | 'info' | 'error') => void;
   onNavigate: (view: any) => void;
 }
@@ -48,7 +47,6 @@ export const CollectorsView: React.FC<CollectorsViewProps> = ({
   currentUser,
   onAddAccount,
   onDeleteAccount,
-  onDeleteAllAccounts,
   onShowToast,
   onNavigate,
 }) => {
@@ -200,39 +198,18 @@ export const CollectorsView: React.FC<CollectorsViewProps> = ({
     });
   }, [selectedCollectorCollections, periodInfo, historySearch]);
 
-  const handleRegister = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!firstName.trim() || !lastName.trim() || !email.trim() || !password.trim()) {
-      onShowToast('Please fill out all required fields.', 'error');
-      return;
+  const handleRegister = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!onAddAccount || isSubmitting) return;
+    if (!firstName.trim() || !lastName.trim() || !email.trim() || password.length < 12 || new TextEncoder().encode(password).length > 72) {
+      onShowToast('Enter name, email and a password of at least 12 characters (maximum 72 UTF-8 bytes).', 'error'); return;
     }
-
     setIsSubmitting(true);
-    const generatedTerminalId = `TRM-${Math.floor(1000 + Math.random() * 9000)}`;
-
-    setTimeout(() => {
-      onAddAccount?.({
-        firstName: firstName.trim(),
-        lastName: lastName.trim(),
-        fullName: `${firstName.trim()} ${lastName.trim()}`,
-        email: email.trim().toLowerCase(),
-        phone: phone.trim() || '+237 600000000',
-        password: password.trim(),
-        branch,
-        role,
-        terminalId: generatedTerminalId,
-        status: 'ACTIVE',
-      });
-
-      setFirstName('');
-      setLastName('');
-      setEmail('');
-      setPhone('');
-      setPassword('');
-      setIsSubmitting(false);
-      setIsAddModalOpen(false);
-      onShowToast(`New Collector ${firstName} (${generatedTerminalId}) registered successfully!`, 'success');
-    }, 300);
+    try {
+      await onAddAccount({ firstName: firstName.trim(), lastName: lastName.trim(), fullName: (firstName + ' ' + lastName).trim(), email: email.trim().toLowerCase(), phone: phone.trim(), password, branch, role: 'Field Cash Collector', terminalId: '', status: 'ACTIVE' });
+      setFirstName(''); setLastName(''); setEmail(''); setPhone(''); setPassword(''); setIsAddModalOpen(false);
+    } catch { onShowToast('Registration failed. Check details and cash administrator access.', 'error'); }
+    finally { setIsSubmitting(false); }
   };
 
   // Export PDF Statement for Selected Collector & Period
@@ -387,7 +364,7 @@ export const CollectorsView: React.FC<CollectorsViewProps> = ({
             {onDeleteAccount && (
               <button
                 onClick={() => {
-                  if (window.confirm(`Delete collector ${selectedCollector.fullName || selectedCollector.firstName}? All their collection history will be purged.`)) {
+                  if (window.confirm(`Deactivate collector ${selectedCollector.fullName || selectedCollector.firstName}? Their collection history will be retained.`)) {
                     onDeleteAccount(selectedCollector.id);
                     setSelectedCollector(null);
                   }
@@ -395,7 +372,7 @@ export const CollectorsView: React.FC<CollectorsViewProps> = ({
                 className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-xs font-bold uppercase tracking-wider flex items-center gap-2 transition-colors cursor-pointer shadow-xs"
               >
                 <Trash2 className="w-4 h-4" />
-                <span>Delete Collector</span>
+                <span>Deactivate Collector</span>
               </button>
             )}
           </div>
@@ -594,18 +571,7 @@ export const CollectorsView: React.FC<CollectorsViewProps> = ({
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          {onDeleteAllAccounts && accounts.length > 0 && (
-            <button
-              onClick={onDeleteAllAccounts}
-              className="px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-xs"
-              title="Delete all collectors and their collection history"
-            >
-              <Trash2 className="w-4 h-4" />
-              <span>Delete All Collectors</span>
-            </button>
-          )}
-
-          {onAddAccount && (
+{onAddAccount && (
             <button
               onClick={() => setIsAddModalOpen(true)}
               className="px-6 py-2.5 bg-[#0891b2] hover:bg-[#0e7490] text-white text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-xs"
@@ -724,12 +690,12 @@ export const CollectorsView: React.FC<CollectorsViewProps> = ({
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
-                            if (window.confirm(`Delete collector ${acc.fullName || acc.firstName}? All their collection history will be purged.`)) {
+                            if (window.confirm(`Deactivate collector ${acc.fullName || acc.firstName}? Their collection history will be retained.`)) {
                               onDeleteAccount(acc.id);
                             }
                           }}
                           className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
-                          title="Delete Collector"
+                          title="Deactivate Collector"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
@@ -870,13 +836,13 @@ export const CollectorsView: React.FC<CollectorsViewProps> = ({
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-bold uppercase tracking-wider text-[#595959] mb-1">Security PIN / Password *</label>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-[#595959] mb-1">Account password *</label>
                   <input
                     type="text"
                     required
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder="6-digit PIN"
+                    placeholder="account password"
                     className="w-full bg-[#f9f9f9] border border-[#d6d6d6] p-2.5 text-xs text-[#1a1c1c] font-mono font-bold outline-none focus:border-[#0891b2]"
                   />
                 </div>

@@ -1,10 +1,15 @@
-import { Client, Collection, TransactionStatus } from '../types';
+import { Client, Collection, TransactionStatus, UserAccount } from '../types';
 
 const getApiBaseUrl = () => {
   const envUrl = (import.meta as any).env?.VITE_API_URL;
-  if (envUrl) return envUrl;
-  return 'https://api.enakoos.com/api/v1';
+  return resolveCashApiBaseUrl(envUrl, typeof window !== 'undefined' ? window.location : undefined);
 };
+
+// Cash uses its own Access-protected hostname and its own edge proxy.
+export function resolveCashApiBaseUrl(configured: string | undefined, location?: { hostname: string; origin: string }) {
+  if (location?.hostname === 'enakootc.com') return location.origin + '/api/v1';
+  return configured && configured !== 'undefined' ? configured.replace(/\/$/, '') : 'https://api.enakoos.com/api/v1';
+}
 
 const API_BASE_URL = getApiBaseUrl();
 
@@ -13,8 +18,8 @@ export async function fetchRemoteCollections(): Promise<Collection[]> {
     const items: any[] = [];
     let page = 1;
     while (true) {
-      const res = await fetch(`${API_BASE_URL}/cash-collections?limit=100&page=${page}`, {
-        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() }, cache: 'no-store',
+      const res = await cashFetch(`${API_BASE_URL}/cash-collections?limit=100&page=${page}`, {
+        headers: { 'Content-Type': 'application/json', ...cashHeaders() }, cache: 'no-store',
       });
       if (!res.ok) throw new Error('Failed to fetch collections from backend');
       const data = await res.json();
@@ -59,8 +64,8 @@ export async function fetchRemoteCollections(): Promise<Collection[]> {
         summaryNote: descParsed.summaryNote,
         receiptUrl: item.receiptUrl || descParsed.receiptUrl,
         receiptName: item.receiptName || descParsed.receiptName,
-        assignedCollectorId: item.assignedCollectorId || descParsed.assignedCollectorId,
-        assignedCollectorName: item.assignedCollectorName || descParsed.assignedCollectorName,
+        assignedCollectorId: item.collectorId,
+        assignedCollectorName: item.collector?.fullName,
         clientEmail: descParsed.clientEmail || item.clientEmail,
       };
     });
@@ -90,6 +95,8 @@ export async function createRemoteCollection(collection: Collection): Promise<bo
 
     const payload = {
       id: collection.id,
+      collectorId: collection.assignedCollectorId,
+      currency: collection.currency || 'XAF',
       clientName: collection.clientName,
       location: collection.location || 'Douala Field Sector',
       amountCollected: Number(collection.amount),
@@ -100,11 +107,11 @@ export async function createRemoteCollection(collection: Collection): Promise<bo
       receiptUrl: collection.receiptUrl,
     };
 
-    const res = await fetch(`${API_BASE_URL}/cash-collections`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-      body: JSON.stringify(payload),
-    });
+    const form = new FormData();
+    for (const [key, value] of Object.entries(payload)) if (value !== undefined) form.append(key, String(value));
+    if (collection.receiptUrl?.startsWith('data:')) { const blob = await (await cashFetch(collection.receiptUrl)).blob(); form.append('receipt', blob, collection.receiptName || 'receipt.' + (blob.type === 'application/pdf' ? 'pdf' : blob.type === 'image/png' ? 'png' : 'jpg')); }
+    const headers = new Headers(cashHeaders()); headers.delete('Content-Type');
+    const res = await cashFetch(API_BASE_URL + '/cash-collections', { method: 'POST', headers, body: form });
 
     return res.ok;
   } catch (error) {
@@ -124,9 +131,9 @@ export async function updateRemoteCollectionStatus(
   }
 ): Promise<boolean> {
   try {
-    const res = await fetch(`${API_BASE_URL}/cash-collections/${collectionId}/status`, {
+    const res = await cashFetch(`${API_BASE_URL}/cash-collections/${collectionId}/status`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+      headers: { 'Content-Type': 'application/json', ...cashHeaders() },
       body: JSON.stringify({ status, ...metadata }),
     });
 
@@ -141,10 +148,10 @@ export async function updateRemoteCollectionStatus(
 
 export async function fetchRemoteClients(): Promise<any[]> {
   try {
-    const res = await fetch(`${API_BASE_URL}/cash-collections/clients`, {
-      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+    const res = await cashFetch(`${API_BASE_URL}/cash-collections/clients`, {
+      headers: { 'Content-Type': 'application/json', ...cashHeaders() },
     });
-    if (!res.ok) return [];
+    if (!res.ok) throw new Error('Records could not be loaded. Check your access and connection.');
     const clients = await res.json();
     return Array.isArray(clients) ? clients : [];
   } catch (error) {
@@ -155,9 +162,9 @@ export async function fetchRemoteClients(): Promise<any[]> {
 
 export async function createRemoteClient(clientData: any): Promise<any | null> {
   try {
-    const res = await fetch(`${API_BASE_URL}/cash-collections/clients`, {
+    const res = await cashFetch(`${API_BASE_URL}/cash-collections/clients`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+      headers: { 'Content-Type': 'application/json', ...cashHeaders() },
       body: JSON.stringify(clientData),
     });
     if (!res.ok) return null;
@@ -168,52 +175,41 @@ export async function createRemoteClient(clientData: any): Promise<any | null> {
   }
 }
 
+function safeCollectorProfile(value: any): UserAccount {
+  return { id: value.id, firstName: value.firstName || '', lastName: value.lastName || '', fullName: value.fullName || '', email: value.email || '', phone: value.phone || '', branch: value.branch || '', role: value.role || '', terminalId: value.terminalId || '', createdAt: value.createdAt, status: value.status };
+}
+
 export async function fetchRemoteCollectors(): Promise<any[]> {
   try {
-    const res = await fetch(`${API_BASE_URL}/cash-collections/collectors`, {
-      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+    const res = await cashFetch(`${API_BASE_URL}/cash-collections/collectors`, {
+      headers: { 'Content-Type': 'application/json', ...cashHeaders() },
     });
     if (!res.ok) return [];
     const collectors = await res.json();
-    return Array.isArray(collectors) ? collectors : [];
+    return Array.isArray(collectors) ? collectors.map(safeCollectorProfile) : [];
   } catch (error) {
     console.warn('Backend collectors fetch notice:', error);
     return [];
   }
 }
 
-export async function createRemoteCollector(collectorData: any): Promise<boolean> {
-  try {
-    const res = await fetch(`${API_BASE_URL}/cash-collections/collectors`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-      body: JSON.stringify(collectorData),
-    });
-    return res.ok;
-  } catch (error) {
-    console.warn('Backend collector create notice:', error);
-    return false;
-  }
+export async function createRemoteCollector(collectorData: any): Promise<any> {
+  const res = await cashFetch(API_BASE_URL + '/cash-collections/collectors', { method: 'POST', headers: cashHeaders(), body: JSON.stringify(collectorData) });
+  if (!res.ok) throw new Error('Collector registration failed. Check details and cash administrator access.');
+  return safeCollectorProfile(await res.json());
 }
 
-export async function deleteRemoteCollector(id: string): Promise<boolean> {
-  try {
-    const res = await fetch(`${API_BASE_URL}/cash-collections/collectors/${id}`, {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-    });
-    return res.ok;
-  } catch (error) {
-    console.warn('Backend collector delete notice:', error);
-    return false;
-  }
+export async function deleteRemoteCollector(id: string, reason: string): Promise<boolean> {
+  const res = await cashFetch(API_BASE_URL + '/cash-collections/collectors/' + encodeURIComponent(id), { method: 'DELETE', headers: cashHeaders(), body: JSON.stringify({ confirmation: id, reason }) });
+  if (!res.ok) throw new Error('Collector deactivation failed. Only dedicated cash accounts can be deactivated.');
+  return true;
 }
 
 export async function deleteAllRemoteCollectors(): Promise<boolean> {
   try {
-    const res = await fetch(`${API_BASE_URL}/cash-collections/collectors`, {
+    const res = await cashFetch(`${API_BASE_URL}/cash-collections/collectors`, {
       method: 'DELETE',
-      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+      headers: { 'Content-Type': 'application/json', ...cashHeaders() },
     });
     return res.ok;
   } catch (error) {
@@ -267,7 +263,7 @@ export async function fetchRemoteTransactions(params?: {
     if (params?.channel) q.append('channel', params.channel);
 
     const headers = getAuthHeaders();
-    const res = await fetch(`${API_BASE_URL}/transactions?${q.toString()}`, {
+    const res = await cashFetch(`${API_BASE_URL}/cash-transactions?${q.toString()}`, {
       headers,
     });
     if (res.ok) {
@@ -279,20 +275,8 @@ export async function fetchRemoteTransactions(params?: {
     console.warn('Remote transactions fetch notice:', error);
   }
 
-  // Merge remote data with local cache
-  const localItems = getLocalTransactions();
-  const remoteIds = new Set(remoteItems.map((r: any) => r.id));
-  const newFromLocal = remoteSucceeded ? [] : localItems.filter((l: any) => !remoteIds.has(l.id));
-
-  let combined = [
-    ...remoteItems.map((remote: any) => ({ ...localItems.find((local: any) => local.id === remote.id), ...remote })),
-    ...newFromLocal,
-  ];
-
-  // If remote returns empty, supply exact real PostgreSQL database transactions
-  if (combined.length === 0) {
-    combined = REAL_DATABASE_TRANSACTION_RECORDS;
-  }
+  if (!remoteSucceeded) throw new Error('Transactions could not be loaded from the server.');
+  const combined = remoteItems;
 
   // Map database item properties cleanly
   const mapped = combined.map((item: any) => {
@@ -338,7 +322,11 @@ export async function fetchRemoteTransactions(params?: {
   return { items: filtered, totals: [] };
 }
 
+const cashTransactionRequests = new Map<string, string>();
 export async function createRemoteTransaction(payload: any): Promise<boolean> {
+  const signature = JSON.stringify(payload);
+  const requestKey = cashTransactionRequests.get(signature) || crypto.randomUUID();
+  cashTransactionRequests.set(signature, requestKey);
   const newTx = {
     id: payload.id || `FX-${Math.floor(1000 + Math.random() * 9000)}`,
     ...payload,
@@ -346,14 +334,14 @@ export async function createRemoteTransaction(payload: any): Promise<boolean> {
   };
 
   try {
-    const res = await fetch(`${API_BASE_URL}/transactions`, {
+    const res = await cashFetch(`${API_BASE_URL}/cash-transactions`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+      headers: { ...getAuthHeaders(), 'Idempotency-Key': requestKey },
       body: JSON.stringify(newTx),
     });
     if (!res.ok) return false;
     const saved = await res.json();
-    saveLocalTransaction({ ...newTx, ...saved });
+    cashTransactionRequests.delete(signature);
     return true;
   } catch (error) {
     console.warn('Remote transaction creation note:', error);
@@ -362,159 +350,68 @@ export async function createRemoteTransaction(payload: any): Promise<boolean> {
 }
 
 export async function settleRemoteTransaction(id: string, charges?: number): Promise<boolean> {
-  // Update local storage
-  try {
-    const local = getLocalTransactions();
-    const updated = local.map((tx) => (tx.id === id ? { ...tx, status: 'SETTLED' } : tx));
-    localStorage.setItem('enako_cash_transactions', JSON.stringify(updated));
-  } catch (e) {}
-
-  try {
-    const res = await fetch(`${API_BASE_URL}/transactions/${id}/status/SETTLED`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ charges: charges || 0 }),
-    });
-    return res.ok || true;
-  } catch (error) {
-    console.warn('Remote transaction settlement note:', error);
-    return true;
-  }
+  const res = await cashFetch(API_BASE_URL + '/cash-transactions/' + encodeURIComponent(id) + '/status/SETTLED', { method: 'PATCH', headers: getAuthHeaders(), body: JSON.stringify({ charges: charges || 0 }) });
+  if (!res.ok) throw new Error('Settlement was not saved. Refresh and check the transaction status.');
+  return true;
 }
 
-export async function authenticatePortalUser(email: string, password: string): Promise<{ success: boolean; error?: string }> {
+export interface CashProfile { id: string; name: string; email: string; terminalId: string; branch: string; cashLevel: 'operator' | 'administrator' }
+const CASH_TOKEN = 'enako_cash_session_v1';
+export const hasCashSession = () => Boolean(sessionStorage.getItem(CASH_TOKEN));
+export const clearCashSession = () => { sessionStorage.removeItem(CASH_TOKEN); sessionStorage.removeItem('enako_cash_os_session_v1'); sessionStorage.removeItem('enako_cash_os_refresh_v1'); };
+const cashHeaders = (): Record<string, string> => ({ 'Content-Type': 'application/json', ...(sessionStorage.getItem(CASH_TOKEN) ? { Authorization: 'Bearer ' + sessionStorage.getItem(CASH_TOKEN) } : {}) });
+const getAuthHeaders = cashHeaders;
+async function cashFetch(url: string, options: RequestInit = {}) { return fetch(url, { ...options, credentials: 'same-origin', cache: 'no-store' }); }
+export async function authenticatePortalUser(identifier: string, password: string): Promise<{ success: boolean; user?: CashProfile; error?: string }> {
+  clearCashSession();
   try {
-    const res = await fetch(`${API_BASE_URL}/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
-    });
-    if (!res.ok) return { success: false, error: 'Invalid email, terminal ID, or password.' };
-
+    const res = await cashFetch(API_BASE_URL + '/cash-auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ identifier, password }) });
+    if (!res.ok) return { success: false, error: 'Invalid cash credentials, account not provisioned, or too many attempts.' };
     const data = await res.json();
-    if (!data.accessToken) return { success: false, error: 'The server did not return a valid session.' };
-    localStorage.setItem('enako_access_token', data.accessToken);
-    sessionStorage.setItem('enako_access_token', data.accessToken);
-    return { success: true };
-  } catch (error) {
-    console.warn('Portal authentication notice:', error);
-    return { success: false, error: 'Unable to reach the authentication service.' };
-  }
+    if (!data.accessToken || !data.user || !['operator', 'administrator'].includes(data.user.cashLevel)) return { success: false, error: 'Invalid authentication response.' };
+    sessionStorage.setItem(CASH_TOKEN, data.accessToken);
+    return { success: true, user: data.user };
+  } catch { clearCashSession(); return { success: false, error: 'Unable to reach the authentication service.' }; }
 }
-
-export async function ensureAdminToken(): Promise<string | null> {
-  let token: string | null = null;
+export async function restoreCashSession(): Promise<CashProfile | null> {
+  if (!hasCashSession()) return null;
   try {
-    token =
-      sessionStorage.getItem('enako_access_token') ||
-      localStorage.getItem('enako_access_token') ||
-      localStorage.getItem('access_token');
-  } catch (e) {}
-  return token;
+    const res = await cashFetch(API_BASE_URL + '/cash-auth/me', { headers: cashHeaders(), cache: 'no-store' });
+    if (!res.ok) { clearCashSession(); return null; }
+    return await res.json();
+  } catch { clearCashSession(); return null; }
 }
-
-const getAuthHeaders = (): Record<string, string> => {
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-  };
-  try {
-    const token =
-      sessionStorage.getItem('enako_access_token') ||
-      localStorage.getItem('enako_access_token') ||
-      localStorage.getItem('access_token');
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
-  } catch (e) {}
-  return headers;
-};
+export async function logoutCashSession(): Promise<void> {
+  const headers = cashHeaders(), authenticated = hasCashSession();
+  clearCashSession();
+  if (authenticated) await cashFetch(API_BASE_URL + '/cash-auth/logout', { method: 'POST', headers });
+}
 
 // Real KYC Submissions loaded dynamically from Backend API / Database
 const REAL_DATABASE_KYC_RECORDS: any[] = [];
 
-export async function fetchKycDocument(fileUrl: string): Promise<Blob> {
-  if (!fileUrl) throw new Error('This document has no file URL. Please request a new upload.');
-  const url = new URL(fileUrl, `${new URL(API_BASE_URL).origin}/`);
-  if (!['http:', 'https:'].includes(url.protocol)) {
-    throw new Error('This document has an invalid file URL.');
-  }
-  // Stored public URLs do not require the new backend route or an API token.
-  let response: Response;
-  try {
-    response = await fetch(url.href);
-  } catch {
-    throw new Error('Unable to load this document. Check your connection and try again.');
-  }
-  if (!response.ok) {
-    throw new Error('This document is unavailable. Please retry or contact an administrator.');
-  }
-  return response.blob();
+export async function fetchKycDocument(fileUrl: string, submissionId?: string, documentId?: string): Promise<Blob> {
+  const url = new URL(fileUrl, new URL(API_BASE_URL).origin);
+  if (url.origin !== new URL(API_BASE_URL).origin || !url.pathname.startsWith('/api/v1/cash-collections/documents/')) throw new Error('This legacy document requires the approved Cash document migration');
+  const response = await cashFetch(url.href, { headers: cashHeaders() });
+  if (!response.ok) throw new Error('Cash document unavailable or access denied'); return response.blob();
 }
-
 
 export async function fetchRemoteKycSubmissions(params?: {
   status?: string;
   search?: string;
   limit?: number;
 }): Promise<any[]> {
-  await ensureAdminToken();
+
   const q = new URLSearchParams();
   if (params?.status) q.append('status', params.status);
   if (params?.search) q.append('search', params.search);
   if (params?.limit) q.append('limit', String(params.limit || 100));
 
-  let headers = getAuthHeaders();
-  let remoteData: any[] = [];
-
-  const mainEndpoint = `${API_BASE_URL}/kyc/submissions?${q.toString()}`;
-  try {
-    let res = await fetch(mainEndpoint, { headers });
-    // If 401 or 403, refresh CEO token and retry immediately
-    if (res.status === 401 || res.status === 403) {
-      const freshToken = await ensureAdminToken();
-      if (freshToken) {
-        headers = { ...headers, Authorization: `Bearer ${freshToken}` };
-        res = await fetch(mainEndpoint, { headers });
-      }
-    }
-    if (res.ok) {
-      const data = await res.json();
-      const items = Array.isArray(data) ? data : (data.items || data.users || data.data || []);
-      if (items && items.length > 0) {
-        remoteData = items;
-      }
-    }
-  } catch (err) {
-    console.warn(`Backend fetch notice for ${mainEndpoint}:`, err);
-  }
-
-  // Fallback checks if primary endpoint yielded nothing
-  if (remoteData.length === 0) {
-    const fallbackEndpoints = [
-      `${API_BASE_URL}/users/kyc/requests?${q.toString()}`,
-      `${API_BASE_URL}/kyc?${q.toString()}`,
-      `${API_BASE_URL}/users?${q.toString()}`,
-    ];
-
-    for (const endpoint of fallbackEndpoints) {
-      try {
-        const res = await fetch(endpoint, { headers });
-        if (res.ok) {
-          const data = await res.json();
-          const items = Array.isArray(data) ? data : (data.items || data.users || data.data || []);
-          if (items && items.length > 0) {
-            remoteData = items;
-            break;
-          }
-        }
-      } catch (err) {
-        console.warn(`Backend fetch notice for ${endpoint}:`, err);
-      }
-    }
-  }
-
-  // If remote returned array, use mapped remote items; otherwise load real PostgreSQL DB submissions
-  const sourceList = remoteData.length > 0 ? remoteData : REAL_DATABASE_KYC_RECORDS;
+  const response = await cashFetch(API_BASE_URL + '/cash-kyc/submissions?' + q.toString(), { headers: getAuthHeaders() });
+  if (!response.ok) throw new Error('KYC records could not be loaded. Check management access.');
+  const sourceList = await response.json();
+  if (!Array.isArray(sourceList)) throw new Error('Invalid KYC response');
 
   // Map backend objects into KycSubmission format
   const mappedSubmissions = sourceList.map((item: any) => {
@@ -570,38 +467,14 @@ export async function reviewRemoteKycSubmission(
   id: string,
   reviewData: { status: string; rejectionReason?: string }
 ): Promise<boolean> {
-  const headers = getAuthHeaders();
-
-  // Update in-memory real list first
-  const target = REAL_DATABASE_KYC_RECORDS.find((k) => k.id === id);
-  if (target) {
-    target.status = reviewData.status;
-    target.rejectionReason = reviewData.rejectionReason || '';
-  }
-
-  const endpoints = [
-    { url: `${API_BASE_URL}/kyc/submissions/${id}/review`, method: 'PATCH' },
-    { url: `${API_BASE_URL}/users/${id}/kyc`, method: 'PATCH' },
-    { url: `${API_BASE_URL}/kyc/${id}/review`, method: 'POST' },
-  ];
-
-  for (const ep of endpoints) {
-    try {
-      const res = await fetch(ep.url, {
-        method: ep.method,
-        headers,
-        body: JSON.stringify(reviewData),
-      });
-      if (res.ok) return true;
-    } catch (e) {}
-  }
-
+  const response = await cashFetch(API_BASE_URL + '/cash-kyc/submissions/' + encodeURIComponent(id) + '/review', { method: 'PATCH', headers: getAuthHeaders(), body: JSON.stringify(reviewData) });
+  if (!response.ok) { const error = await response.json().catch(() => ({})); throw new Error(error.message || 'KYC review was not saved'); }
   return true;
 }
 
 export async function submitClientKyc(formData: FormData): Promise<{ success: boolean; data?: any; error?: string }> {
   try {
-    const res = await fetch(`${API_BASE_URL}/kyc/submissions`, {
+    const res = await cashFetch(`${API_BASE_URL}/cash-kyc/submissions`, {
       method: 'POST',
       body: formData,
       headers: {
@@ -675,63 +548,11 @@ export function getInitialKycApprovedClients(): Client[] {
 
 // ─── AUTOMATED EMAIL NOTIFICATION SERVICE ───
 
-export async function sendCollectionNotificationEmail(
-  collection: Collection,
-  clientEmail?: string,
-  eventType: 'CREATED' | 'COMPLETED' = 'CREATED',
-  pdfBase64?: string
-): Promise<boolean> {
-  const targetEmail = clientEmail || collection.clientEmail || 'enakoweb88@gmail.com';
-  const cleanId = collection.id.replace(/^COL-/, '');
-  const currencyStr = collection.currency || 'FCFA';
-  const amountStr = `${Number(collection.amount || 0).toLocaleString()} ${currencyStr}`;
-
-  const subject = eventType === 'CREATED'
-    ? `E-NAKO CASH RECEIPT: Collection #${cleanId} (${amountStr})`
-    : `✔ E-NAKO SETTLEMENT CONFIRMATION: Collection #${cleanId} Completed (${amountStr})`;
-
-  console.log(`[AUTOMATED EMAIL DISPATCH] Sending ${eventType} receipt email from cash@enakoos.com to: ${targetEmail}`);
-
-  const endpoints = [
-    `${API_BASE_URL}/cash-collections/send-receipt`,
-    `${API_BASE_URL}/notifications/email`,
-  ];
-
-  const payload = {
-    to: targetEmail,
-    toEmail: targetEmail,
-    subject,
-    collectionId: collection.id,
-    clientName: collection.clientName,
-    amount: Number(collection.amount),
-    currency: currencyStr,
-    collectorName: collection.assignedCollectorName || 'Field Cash Collector',
-    location: collection.location || 'Douala Field Sector',
-    status: collection.status,
-    time: collection.time || new Date().toLocaleString(),
-    depositDestination: collection.depositDestination,
-    pdfBase64,
-  };
-
-  let dispatched = false;
-  for (const ep of endpoints) {
-    try {
-      const res = await fetch(ep, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-        body: JSON.stringify(payload),
-      });
-      if (res.ok) {
-        console.log(`[AUTOMATED EMAIL DISPATCH] Successfully delivered via ${ep} to ${targetEmail}`);
-        dispatched = true;
-        break;
-      }
-    } catch (e) {
-      console.warn(`[AUTOMATED EMAIL DISPATCH] Notice for ${ep}:`, e);
-    }
-  }
-
-  return dispatched || true;
+export async function sendCollectionNotificationEmail(collection: Collection, _clientEmail?: string, _eventType: 'CREATED' | 'COMPLETED' = 'CREATED', _pdfBase64?: string): Promise<boolean> {
+  try {
+    const res = await cashFetch(API_BASE_URL + '/cash-collections/send-receipt', { method: 'POST', headers: cashHeaders(), body: JSON.stringify({ collectionId: collection.id }) });
+    return res.ok;
+  } catch { return false; }
 }
 
 export async function sendKycDecisionNotificationEmail(
@@ -740,28 +561,29 @@ export async function sendKycDecisionNotificationEmail(
   status: 'APPROVED' | 'REJECTED' = 'APPROVED',
   rejectionReason?: string
 ): Promise<boolean> {
-  const targetEmail = email || `${applicantName.toLowerCase().replace(/\s+/g, '.')}@enako.cm`;
-  const subject = status === 'APPROVED'
-    ? 'E-NAKO KYC VERIFICATION: Application Approved'
-    : 'E-NAKO KYC VERIFICATION: Application Status Update';
+  // Cash KYC review is persisted by its dedicated API. Email requires independently configured Cash delivery.
+  return false;
+}
+export async function cashDocumentUrl(url: string) {
+  const target = new URL(url, new URL(API_BASE_URL).origin);
+  if (target.origin !== new URL(API_BASE_URL).origin || !target.pathname.startsWith('/api/v1/cash-collections/documents/')) throw new Error('Legacy receipt requires migration or an authorized retrieval link');
+  const response = await cashFetch(target.href, { headers: cashHeaders(), cache: 'no-store' });
+  if (!response.ok) throw new Error('Receipt could not be retrieved'); return URL.createObjectURL(await response.blob());
+}
 
-  console.log(`[AUTOMATED KYC EMAIL DISPATCH] Sending ${status} decision email to: ${targetEmail}`);
+export async function saveCollectionReceipt(id: string, dataUrl: string) {
+  const blob = await (await cashFetch(dataUrl)).blob(), form = new FormData();
+  form.append('receipt', blob, blob.type === 'image/png' ? 'receipt.png' : 'receipt.jpg');
+  const headers = new Headers(cashHeaders()); headers.delete('Content-Type');
+  const response = await cashFetch(API_BASE_URL + '/cash-collections/' + encodeURIComponent(id) + '/receipt', { method: 'POST', headers, body: form });
+  if (!response.ok) throw new Error('Receipt was not saved. Only pending collections can be updated.'); return response.json();
+}
 
-  try {
-    const res = await fetch(`${API_BASE_URL}/notifications/kyc-email`, {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify({
-        to: targetEmail,
-        subject,
-        applicantName,
-        status,
-        rejectionReason: rejectionReason || '',
-      }),
-    });
-    return res.ok || true;
-  } catch (e) {
-    console.warn(`[AUTOMATED KYC EMAIL DISPATCH] Decision email queued for ${targetEmail}`);
-    return true;
-  }
+export async function fetchCashExchangeRates() {
+  const response = await cashFetch(API_BASE_URL + '/cash-transactions/exchange-rates', { headers: cashHeaders() });
+  if (!response.ok) throw new Error('Cash exchange rates could not be loaded'); return response.json();
+}
+export async function saveCashExchangeRates(rates: unknown[]) {
+  const response = await cashFetch(API_BASE_URL + '/cash-transactions/exchange-rates', { method: 'POST', headers: cashHeaders(), body: JSON.stringify({ rates }) });
+  if (!response.ok) throw new Error('Cash exchange rates were not saved'); return response.json();
 }

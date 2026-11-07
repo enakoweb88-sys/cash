@@ -81,7 +81,7 @@ export const KycView: React.FC<KycViewProps> = ({ user, onShowToast, onAutoCreat
     setOpeningDocument(doc.id);
     setDocumentError('');
     try {
-      const storedBlob = await fetchKycDocument(doc.fileUrl || '');
+      const storedBlob = await fetchKycDocument(doc.fileUrl || '', selectedApplicant.id, doc.id);
       const blob = download ? storedBlob : await prepareDocumentPreview(storedBlob);
       const url = URL.createObjectURL(blob);
       if (download) {
@@ -121,18 +121,10 @@ export const KycView: React.FC<KycViewProps> = ({ user, onShowToast, onAutoCreat
       });
 
       if (ok) {
-        // Trigger automated KYC status update email to applicant
-        sendKycDecisionNotificationEmail(
-          selectedApplicant.applicantName,
-          selectedApplicant.email,
-          reviewStatus as any,
-          reviewStatus === 'REJECTED' ? rejectionReason : undefined
-        );
-
         if (reviewStatus === 'APPROVED' && onAutoCreateClient) {
           onAutoCreateClient({ ...selectedApplicant, status: 'APPROVED' });
         }
-        onShowToast(`KYC decision recorded & notification email sent to ${selectedApplicant.applicantName}!`, 'success');
+        onShowToast(`Cash KYC decision saved for ${selectedApplicant.applicantName}.`, 'success');
         setSelectedApplicant(null);
         setReviewStatus('');
         setRejectionReason('');
